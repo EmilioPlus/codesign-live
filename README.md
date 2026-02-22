@@ -91,20 +91,27 @@ WebRTC y WebGL
   ** Backend **
 
   1️⃣ Clonar el repositorio
+  
       git clone https://github.com/tu-usuario/codesign-live.git
+      
       cd codesign-live
       
   2️⃣ Ingresar a la carpeta del servidor
+  
       cd server
       
   3️⃣ Instalar dependencias
+  
       npm install
       
   4️⃣ Ejecutar el servidor en modo desarrollo
+  
       npm run dev
       
   5️⃣ Verificar que la API está corriendo en: http://localhost:4000
+  
   ⚠️ Nota técnica (ES Modules)
+  
       El backend utiliza sintaxis de módulos ES (import/export).
       Si al ejecutar npm run dev aparece un error relacionado con Cannot use import statement outside a module, verifique que en el archivo package.
       json del servidor exista la siguiente configuración:  "type": "module"
@@ -112,20 +119,29 @@ WebRTC y WebGL
 
       
   ** Frontend **
+  
   6️⃣ Abrir una nueva terminal e ingresar a la carpeta del cliente
+  
       cd client
       
   7️⃣ Instalar dependencias
+  
       npm install
-      Durante la instalación, puede aparecer un mensaje indicando vulnerabilidades o sugerencias para actualizar dependencias (por ejemplo relacionadas con ESLint).
+      
+      Durante la instalación, puede aparecer un mensaje indicando vulnerabilidades o sugerencias para actualizar dependencias
+      (por ejemplo relacionadas con ESLint).
+      
       ⚠️ Importante:
+      
           No ejecutar: npm audit fix --force.
           Puedes usar npm audit fix si aun asi persisten las actualizaciones, continua sin force. 
-          El uso de --force puede instalar versiones incompatibles de dependencias (por ejemplo ESLint 10), generando conflictos con typescript-eslint y rompiendo la instalación del proyecto.
+          El uso de --force puede instalar versiones incompatibles de dependencias (por ejemplo ESLint 10), 
+          generando conflictos con typescript-eslint y rompiendo la instalación del proyecto.
           Las vulnerabilidades reportadas por npm audit suelen provenir de subdependencias internas y no afectan el entorno de desarrollo del proyecto.
           En caso de que aparezcan advertencias, se recomienda continuar sin forzar actualizaciones automáticas.
           
   8️⃣ Ejecutar el frontend
+  
       npm run dev
       
   9️⃣ Acceder a la aplicación en: http://localhost:5173
