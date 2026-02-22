@@ -78,8 +78,11 @@ Firebase (Authentication, Firestore y Storage).
 ## Requisitos
 
 Node.js v18+
+
 npm
+
 Git
+
 WebRTC y WebGL
 
 ---
