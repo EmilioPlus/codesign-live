@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+#Claves Firebase
+node_modules/
+codesign-live-firebase-adminsdk-fbsvc-1f2489e3a2.json
