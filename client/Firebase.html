@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Firebase</title>
+</head>
+<body>
+
+  <button onclick="guardar()">Guardar</button>
+
+  <script>
+    async function guardar() {
+      await fetch("http://localhost:3000/guardar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          nombre: "Andres",
+          edad: 22
+        })
+      });
+
+      alert("Enviado");
+    }
+  </script>
+
+</body>
+</html>
