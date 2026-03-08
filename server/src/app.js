@@ -2,6 +2,8 @@ import express from "express"
 import cors from "cors"
 import dotenv from "dotenv"
 import Routes from "./routes/rutas.js"
+import AuthRoutes from "./routes/auth.routes.js"
+import StreamsRoutes from "./routes/streams.routes.js"
 import { errorHandler } from "./middlewares/middleware.error.js"
 import { notFound } from "./middlewares/middleware.notFound.js"
 
@@ -18,6 +20,8 @@ app.use(cors({
 app.use(express.json())
 
 app.use("/api/rutas", Routes)
+app.use("/api/auth", AuthRoutes)
+app.use("/api/streams", StreamsRoutes)
 
 app.use(notFound)
 app.use(errorHandler)
