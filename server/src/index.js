@@ -1,8 +1,10 @@
 import http from "http"
 import { WebSocketServer } from "ws"
 import app from "./app.js"
+import db from "./config/firebase.js"
 
 const PORT = process.env.PORT || 4000
+const STREAMS_COLLECTION = "streams"
 
 const server = http.createServer(app)
 
@@ -80,34 +82,114 @@ wss.on("connection", (ws) => {
       )
       return
     }
+
+    if (msg.type === "chat" && msg.streamId && typeof msg.text === "string") {
+      if (client.streamId !== msg.streamId) return
+      const streamInfo = streams.get(msg.streamId)
+      if (!streamInfo) return
+      const payload = JSON.stringify({
+        type: "chat-message",
+        streamId: msg.streamId,
+        text: msg.text.slice(0, 2000),
+        userName: msg.userName || "Anónimo",
+        clientId,
+        timestamp: Date.now(),
+      })
+      streamInfo.viewers.forEach((viewerId) => {
+        const viewer = clients.get(viewerId)
+        if (viewer) viewer.ws.send(payload)
+      })
+      if (streamInfo.broadcasterId) {
+        const broadcaster = clients.get(streamInfo.broadcasterId)
+        if (broadcaster) broadcaster.ws.send(payload)
+      }
+      return
+    }
+
+    if (msg.type === "forum-created" && msg.streamId && msg.forum) {
+      if (client.streamId !== msg.streamId) return
+      const streamInfo = streams.get(msg.streamId)
+      if (!streamInfo) return
+      const payload = JSON.stringify({ type: "forum-created", streamId: msg.streamId, forum: msg.forum })
+      streamInfo.viewers.forEach((viewerId) => {
+        const viewer = clients.get(viewerId)
+        if (viewer) viewer.ws.send(payload)
+      })
+      if (streamInfo.broadcasterId) {
+        const broadcaster = clients.get(streamInfo.broadcasterId)
+        if (broadcaster) broadcaster.ws.send(payload)
+      }
+      return
+    }
+
+    if (msg.type === "forum-update" && msg.streamId && msg.forumId) {
+      if (client.streamId !== msg.streamId) return
+      const streamInfo = streams.get(msg.streamId)
+      if (!streamInfo) return
+      const payload = JSON.stringify({ type: "forum-update", streamId: msg.streamId, forumId: msg.forumId })
+      streamInfo.viewers.forEach((viewerId) => {
+        const viewer = clients.get(viewerId)
+        if (viewer) viewer.ws.send(payload)
+      })
+      if (streamInfo.broadcasterId) {
+        const broadcaster = clients.get(streamInfo.broadcasterId)
+        if (broadcaster) broadcaster.ws.send(payload)
+      }
+      return
+    }
   })
 
   ws.on("close", () => {
     clients.delete(clientId)
     if (client.streamId) {
       const streamInfo = streams.get(client.streamId)
-      if (!streamInfo) return
       if (client.role === "broadcaster") {
-        // Notificar a los viewers que el stream terminó
-        streamInfo.viewers.forEach((viewerId) => {
-          const viewer = clients.get(viewerId)
-          if (viewer) {
-            viewer.ws.send(
-              JSON.stringify({
-                type: "stream-ended",
-                streamId: client.streamId,
-              })
-            )
-          }
-        })
-        streams.delete(client.streamId)
-      } else if (client.role === "viewer") {
+        const streamId = client.streamId
+        if (streamInfo) {
+          streamInfo.viewers.forEach((viewerId) => {
+            const viewer = clients.get(viewerId)
+            if (viewer) {
+              viewer.ws.send(
+                JSON.stringify({ type: "stream-ended", streamId })
+              )
+            }
+          })
+          streams.delete(streamId)
+        }
+        db.collection(STREAMS_COLLECTION)
+          .doc(streamId)
+          .update({
+            status: "ended",
+            endedAt: new Date().toISOString(),
+          })
+          .catch(() => {})
+      } else if (streamInfo) {
         streamInfo.viewers.delete(clientId)
       }
     }
   })
 })
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
+async function closeOrphanedLiveStreams() {
+  try {
+    const snap = await db
+      .collection(STREAMS_COLLECTION)
+      .where("status", "==", "live")
+      .get()
+    const endedAt = new Date().toISOString()
+    for (const doc of snap.docs) {
+      await doc.ref.update({ status: "ended", endedAt })
+    }
+    if (!snap.empty) {
+      console.log(`[streams] Cerradas ${snap.size} transmisión(es) en vivo al iniciar (sin transmisor conectado)`)
+    }
+  } catch (err) {
+    console.warn("[streams] No se pudieron cerrar transmisiones huérfanas:", err.message)
+  }
+}
+
+closeOrphanedLiveStreams().then(() => {
+  server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`)
+  })
 })

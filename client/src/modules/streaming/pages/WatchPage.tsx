@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams, Link } from "react-router-dom"
+import { useStreamRoom } from "../../../context/StreamRoomContext"
+import { getActiveForumApi, WS_URL } from "../../../services/api"
+import ProjectViewerOverlay from "../components/ProjectViewerOverlay"
 
 const rtcConfig: RTCConfiguration = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -7,19 +10,22 @@ const rtcConfig: RTCConfiguration = {
 
 export default function WatchPage() {
   const { streamId } = useParams()
+  const { addMessage, registerWs, setActiveForum } = useStreamRoom()
   const mainVideoRef = useRef<HTMLVideoElement>(null)
   const overlayVideoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const broadcasterIdRef = useRef<string | null>(null)
   const assignedStreamsRef = useRef<Set<MediaStream>>(new Set())
-  const closedByCleanupRef = useRef(false)
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [isMuted, setIsMuted] = useState(true)
 
   useEffect(() => {
     if (!streamId) return
-    closedByCleanupRef.current = false
+    let isCleanedUp = false
     assignedStreamsRef.current = new Set()
+    pendingIceCandidatesRef.current = []
 
     const pc = new RTCPeerConnection(rtcConfig)
     pcRef.current = pc
@@ -29,12 +35,12 @@ export default function WatchPage() {
       if (!remoteStream || event.track.kind !== "video") return
       if (assignedStreamsRef.current.has(remoteStream)) return
       assignedStreamsRef.current.add(remoteStream)
-      // Primer stream = pantalla (principal), segundo = cámara (overlay)
+      
       const isScreen = assignedStreamsRef.current.size === 1
       const videoEl = isScreen ? mainVideoRef.current : overlayVideoRef.current
       if (videoEl) {
         videoEl.srcObject = remoteStream
-        videoEl.play().catch(() => {})
+        videoEl.play().catch(console.error)
       }
     }
 
@@ -52,10 +58,11 @@ export default function WatchPage() {
       }
     }
 
-    const ws = new WebSocket("ws://localhost:4000/ws")
+    const ws = new WebSocket(WS_URL)
     wsRef.current = ws
 
     ws.onopen = () => {
+      registerWs(ws)
       ws.send(
         JSON.stringify({
           type: "join",
@@ -63,6 +70,7 @@ export default function WatchPage() {
           streamId,
         })
       )
+      getActiveForumApi(streamId).then(({ forum }) => setActiveForum(forum))
     }
 
     ws.onmessage = async (event) => {
@@ -75,8 +83,27 @@ export default function WatchPage() {
 
       if (msg.streamId !== streamId) return
 
+      if (msg.type === "chat-message") {
+        addMessage({
+          text: msg.text,
+          userName: msg.userName ?? "Anónimo",
+          clientId: msg.clientId,
+          timestamp: msg.timestamp ?? Date.now(),
+        })
+        return
+      }
+
+      if (msg.type === "forum-created" && msg.forum) {
+        setActiveForum(msg.forum)
+        return
+      }
+      if (msg.type === "forum-update" && msg.forumId) {
+        getActiveForumApi(streamId).then(({ forum }) => setActiveForum(forum))
+        return
+      }
       if (msg.type === "stream-ended") {
         setError("La transmisión ha finalizado.")
+        setActiveForum(null)
         return
       }
 
@@ -84,6 +111,12 @@ export default function WatchPage() {
         broadcasterIdRef.current = msg.fromId as string
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp))
+          
+          while (pendingIceCandidatesRef.current.length > 0) {
+            const cand = pendingIceCandidatesRef.current.shift()
+            if (cand) await pc.addIceCandidate(new RTCIceCandidate(cand))
+          }
+
           const answer = await pc.createAnswer()
           await pc.setLocalDescription(answer)
           ws.send(
@@ -104,7 +137,11 @@ export default function WatchPage() {
 
       if (msg.type === "ice-candidate" && msg.candidate) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
+          if (pc.remoteDescription) {
+            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
+          } else {
+            pendingIceCandidatesRef.current.push(msg.candidate)
+          }
         } catch {
           // ignore
         }
@@ -113,15 +150,16 @@ export default function WatchPage() {
     }
 
     ws.onerror = () => {
-      if (!closedByCleanupRef.current) setError("Error en la conexión de streaming.")
+      if (!isCleanedUp) setError("Error en la conexión de streaming.")
     }
 
     ws.onclose = () => {
-      if (!closedByCleanupRef.current) setError("Conexión cerrada.")
+      if (!isCleanedUp) setError("Conexión perdida.")
     }
 
     return () => {
-      closedByCleanupRef.current = true
+      isCleanedUp = true
+      registerWs(null)
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close()
       }
@@ -129,40 +167,59 @@ export default function WatchPage() {
       pc.close()
       pcRef.current = null
     }
-  }, [streamId])
+  }, [streamId, addMessage, registerWs, setActiveForum])
 
   return (
-    <div className="h-full flex flex-col gap-6">
+    <div className="h-full flex flex-col gap-4">
       <div>
-        <h2 className="text-2xl font-semibold text-copy">Transmisión en vivo</h2>
+        <h2 className="text-2xl font-semibold text-copy flex items-center justify-between">
+          Transmisión en vivo
+          <button 
+            type="button" 
+            onClick={() => setIsMuted(m => !m)} 
+            className="text-sm px-3 py-1.5 rounded-lg bg-surface-muted border border-border hover:bg-surface transition-colors"
+          >
+            {isMuted ? "🔇 Activar Sonido" : "🔊 Silenciar"}
+          </button>
+        </h2>
         <p className="text-copy-muted text-sm">
           Estás viendo esta transmisión en tiempo real.
         </p>
       </div>
 
-      <div className="flex-1 bg-surface-panel rounded-lg border border-border flex flex-col items-center justify-center gap-4 relative">
+      {/* Contenedor del video con el mismo estilo del StreamPlayer (sin bordes grandes) */}
+      <div className="flex-1 min-h-[400px] flex items-center justify-center bg-surface-muted rounded-lg overflow-hidden relative">
+        <ProjectViewerOverlay />
         <video
           ref={mainVideoRef}
           autoPlay
           playsInline
+          muted={isMuted}
           controls={false}
-          className="aspect-video max-w-4xl w-full bg-surface-muted rounded-lg"
+          className="w-full h-full object-contain rounded-lg"
         />
         <video
           ref={overlayVideoRef}
           autoPlay
           playsInline
+          muted={isMuted}
           controls={false}
-          className="absolute bottom-4 right-4 w-48 aspect-video bg-surface-muted rounded-lg border border-border shadow-lg object-cover"
+          className="absolute bottom-4 right-4 w-48 h-32 rounded-lg border border-border bg-black shadow-lg object-cover z-10"
         />
         {error && (
-          <p className="text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">
-            {error}
-          </p>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+            <p className="text-sm text-danger font-medium bg-surface-panel/90 border border-danger/50 rounded-full px-4 py-2 shadow-xl backdrop-blur-sm flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-danger animate-pulse" />
+              {error}
+            </p>
+          </div>
         )}
+      </div>
+
+      <div className="flex justify-start">
         <Link
           to="/"
-          className="px-4 py-2 rounded-lg bg-surface-muted text-copy text-sm hover:bg-surface border border-border"
+          className="px-4 py-2 rounded-lg bg-surface-panel text-copy text-sm font-medium hover:bg-surface border border-border transition-colors w-fit"
         >
           Volver al inicio
         </Link>

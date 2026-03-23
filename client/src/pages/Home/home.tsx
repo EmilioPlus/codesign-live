@@ -3,6 +3,9 @@ import { Link } from "react-router-dom"
 import { useAuth } from "../../context/AuthContext"
 import { getStreamsApi, type Stream } from "../../services/api"
 
+const DEFAULT_THUMB =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 9' fill='%23374151'%3E%3Crect width='16' height='9' rx='1'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='2' font-family='system-ui'%3EPreview%3C/text%3E%3C/svg%3E"
+
 export default function Home() {
   const { isAuthenticated } = useAuth()
   const [streams, setStreams] = useState<Stream[]>([])
@@ -47,10 +50,12 @@ export default function Home() {
               to={isAuthenticated ? `/stream/${s.id}` : "/login"}
               className="group block bg-surface-panel border border-border rounded-lg overflow-hidden hover:border-brand/50 transition-colors"
             >
-              <div className="aspect-video bg-surface-muted relative">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-copy-muted text-sm">Preview</span>
-                </div>
+              <div className="aspect-video bg-surface-muted relative overflow-hidden">
+                <img
+                  src={s.thumbnailUrl || DEFAULT_THUMB}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
                 <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-danger text-white text-xs font-medium">
                   EN VIVO
                 </span>
@@ -58,9 +63,27 @@ export default function Home() {
                   {s.viewers} espectadores
                 </span>
               </div>
-              <div className="p-3">
-                <p className="font-medium text-copy truncate">{s.title}</p>
-                <p className="text-sm text-copy-muted">{s.user}</p>
+              <div className="p-3 flex gap-3">
+                <div className="flex-shrink-0 w-9 h-9 rounded-full overflow-hidden bg-surface-muted border border-border">
+                  {s.userAvatarUrl ? (
+                    <img src={s.userAvatarUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-copy-muted text-sm font-medium">
+                      {(s.user || "?").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-copy truncate">{s.title}</p>
+                  {s.description ? (
+                    <>
+                      <p className="text-sm text-copy-muted line-clamp-2">{s.description}</p>
+                      <p className="text-xs text-copy-muted/80 mt-0.5">{s.user}</p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-copy-muted">{s.user}</p>
+                  )}
+                </div>
               </div>
             </Link>
           ))

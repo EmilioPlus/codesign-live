@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
-import db from "../../config/firebase.js"
+import db from "../config/firebase.js"
 
 const USERS_COLLECTION = "users"
 const JWT_SECRET = process.env.JWT_SECRET || "codesign-live-secret-change-in-production"
