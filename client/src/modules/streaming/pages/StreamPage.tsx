@@ -2,7 +2,7 @@ import StreamPlayer from "../components/StreamPlayer"
 
 export default function StreamPage() {
   return (
-    <div className="h-full flex flex-col gap-6">
+    <div className="h-full flex flex-col gap-6 min-h-0">
 
       {/* Título */}
       <div>

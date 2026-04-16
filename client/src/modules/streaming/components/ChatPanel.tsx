@@ -18,7 +18,7 @@ export default function ChatPanel() {
 
   if (!room) {
     return (
-      <div className="h-full flex flex-col bg-surface-panel p-4">
+      <div className="flex-1 min-h-0 h-full flex flex-col bg-surface-panel p-4">
         <h3 className="font-semibold text-copy">Chat en Tiempo Real</h3>
         <p className="text-copy-muted text-sm mt-2">Cargando...</p>
       </div>
@@ -37,7 +37,7 @@ export default function ChatPanel() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-surface-panel">
+    <div className="flex-1 min-h-0 h-full flex flex-col bg-surface-panel">
       <div className="p-4 border-b border-border">
         <h3 className="font-semibold text-copy">Chat en Tiempo Real</h3>
       </div>
@@ -54,15 +54,35 @@ export default function ChatPanel() {
             {messages.length === 0 && (
               <p className="text-copy-muted text-sm">Sin mensajes aún. ¡Sé el primero en saludar!</p>
             )}
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className="bg-surface-muted p-3 rounded-lg"
-              >
-                <p className="text-xs text-copy-muted font-medium mb-1">{msg.userName}</p>
-                <p className="text-sm text-copy break-words">{msg.text}</p>
-              </div>
-            ))}
+            {messages.map((msg) => {
+              const isBroadcaster = window.location.pathname === "/stream"
+              const isExclusive = room.exclusiveUser?.clientId === msg.clientId
+              const isMyMessage = msg.userName === user?.name
+              
+              return (
+                <div
+                  key={msg.id}
+                  className={`p-3 rounded-lg relative group ${isExclusive ? 'bg-brand/10 border border-brand/30' : 'bg-surface-muted'}`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <p className={`text-xs font-medium ${isExclusive && isBroadcaster ? 'text-brand animate-pulse' : 'text-copy-muted'}`}>
+                      {msg.userName} {isExclusive && isBroadcaster && "(Invitado Exclusivo)"}
+                    </p>
+                    
+                    {isBroadcaster && !isExclusive && !isMyMessage && msg.clientId && (
+                      <button
+                        onClick={() => room.inviteExclusiveViewer(msg.clientId, msg.userName)}
+                        className="opacity-0 group-hover:opacity-100 text-[10px] bg-brand text-white px-2 py-0.5 rounded transition-opacity"
+                        title="Invitar a audio exclusivo"
+                      >
+                        Hacer Exclusivo
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-sm text-copy break-words">{msg.text}</p>
+                </div>
+              )
+            })}
             <div ref={messagesEndRef} />
           </div>
 

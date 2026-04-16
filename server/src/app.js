@@ -1,6 +1,5 @@
 import express from "express"
 import cors from "cors"
-import dotenv from "dotenv"
 import helmet from "helmet"
 import rateLimit from "express-rate-limit"
 import Routes from "./routes/rutas.js"
@@ -9,6 +8,7 @@ import StreamsRoutes from "./routes/streams.routes.js"
 import ForumsRoutes from "./routes/forums.routes.js"
 import UploadRoutes from "./routes/upload.routes.js"
 import ProjectsRoutes from "./routes/projects.routes.js"
+import AdminRoutes from "./routes/admin.routes.js"
 import { errorHandler } from "./middlewares/middleware.error.js"
 import { notFound } from "./middlewares/middleware.notFound.js"
 import path from "path"
@@ -17,7 +17,7 @@ import { fileURLToPath } from "url"
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-dotenv.config() // ← esto ya está bien arriba
+// dotenv.config() is now called in index.js BEFORE importing this module
 
 const app = express()
 
@@ -50,6 +50,7 @@ app.use("/api/streams", StreamsRoutes)
 app.use("/api/forums", ForumsRoutes)
 app.use("/api/upload", UploadRoutes)
 app.use("/api/projects", ProjectsRoutes)
+app.use("/api/admin", AdminRoutes)
 
 // Serve local uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")))

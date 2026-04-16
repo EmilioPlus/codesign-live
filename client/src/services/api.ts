@@ -1,4 +1,4 @@
-export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api"
+export const API_URL = import.meta.env.VITE_API_URL || (window.location.origin + "/api")
 export const WS_URL = API_URL.replace(/^http/, "ws").replace("/api", "/ws")
 
 const AUTH_KEY = "codesign-live-auth"
@@ -14,14 +14,14 @@ export function getStoredToken(): string | null {
   }
 }
 
-function authHeaders(): HeadersInit {
+export function authHeaders(): HeadersInit {
   const token = getStoredToken()
   const headers: HeadersInit = { "Content-Type": "application/json" }
   if (token) headers["Authorization"] = `Bearer ${token}`
   return headers
 }
 
-async function handleResponse(response: Response) {
+export async function handleResponse(response: Response) {
   if (!response.ok) {
     const contentType = response.headers.get("content-type")
     if (contentType && contentType.includes("application/json")) {
@@ -46,14 +46,27 @@ export type AuthUser = {
   name: string
   email: string
   avatarUrl?: string | null
+  role: string
 }
 
 export const registerApi = async (payload: {
   name: string
   email: string
   password: string
-}): Promise<{ user: AuthUser; token: string }> => {
+}): Promise<{ success: boolean; message: string; user: { id: string; email: string } }> => {
   const response = await fetch(`${API_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  return handleResponse(response)
+}
+
+export const verifyEmailApi = async (payload: {
+  userId: string
+  token: string
+}): Promise<{ success: boolean; message: string }> => {
+  const response = await fetch(`${API_URL}/auth/verify-email`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -91,6 +104,30 @@ export const updateMeApi = async (payload: {
   const response = await fetch(`${API_URL}/auth/me`, {
     method: "PATCH",
     headers: authHeaders(),
+    body: JSON.stringify(payload),
+  })
+  return handleResponse(response)
+}
+
+export const forgotPasswordApi = async (payload: {
+  email: string
+}): Promise<{ success: boolean; message: string }> => {
+  const response = await fetch(`${API_URL}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  return handleResponse(response)
+}
+
+export const resetPasswordApi = async (payload: {
+  token: string
+  userId: string
+  newPassword: string
+}): Promise<{ success: boolean; message: string }> => {
+  const response = await fetch(`${API_URL}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   })
   return handleResponse(response)

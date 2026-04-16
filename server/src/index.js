@@ -1,7 +1,22 @@
+// Load environment variables FIRST before anything else
+import "./config/env.js"
+
+import dotenv from "dotenv"
+import path from "path"
+import { fileURLToPath } from "url"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// Load environment variables FIRST before importing anything else
+dotenv.config({ path: path.join(__dirname, "../.env") })
+
 import http from "http"
 import { WebSocketServer } from "ws"
 import app from "./app.js"
 import db from "./config/firebase.js"
+import { cleanupExpiredTokens } from "./services/token/reset-token.service.js"
+import { cleanupExpiredVerificationTokens } from "./services/token/verification-token.service.js"
 
 const PORT = process.env.PORT || 4000
 const STREAMS_COLLECTION = "streams"
@@ -44,6 +59,15 @@ wss.on("connection", (ws) => {
         streamInfo.broadcasterId = clientId
       } else if (msg.role === "viewer") {
         streamInfo.viewers.add(clientId)
+        const count = streamInfo.viewers.size
+        db.collection(STREAMS_COLLECTION).doc(msg.streamId).update({ viewerCount: count }).catch(() => {})
+
+        const payloadCount = JSON.stringify({ type: "viewer-count", count, streamId: msg.streamId })
+        streamInfo.viewers.forEach(v => {
+          const viewerClient = clients.get(v)
+          if (viewerClient) viewerClient.ws.send(payloadCount)
+        })
+
         if (streamInfo.broadcasterId) {
           const broadcaster = clients.get(streamInfo.broadcasterId)
           if (broadcaster) {
@@ -54,10 +78,12 @@ wss.on("connection", (ws) => {
                 viewerId: clientId,
               })
             )
+            broadcaster.ws.send(payloadCount)
           }
         }
       }
 
+      ws.send(JSON.stringify({ type: "viewer-count", count: streamInfo.viewers.size, streamId: msg.streamId }))
       ws.send(
         JSON.stringify({
           type: "joined",
@@ -69,7 +95,13 @@ wss.on("connection", (ws) => {
       return
     }
 
-    if (msg.type === "offer" || msg.type === "answer" || msg.type === "ice-candidate") {
+    const routeTypes = [
+      "offer", "answer", "ice-candidate", 
+      "invite-exclusive", "exclusive-offer", "exclusive-answer", 
+      "exclusive-ice-candidate", "revoke-exclusive", "exclusive-status",
+      "pointer-move", "pointer-permission"
+    ]
+    if (routeTypes.includes(msg.type)) {
       const targetId = msg.targetId
       if (!targetId) return
       const target = clients.get(targetId)
@@ -165,6 +197,20 @@ wss.on("connection", (ws) => {
           .catch(() => {})
       } else if (streamInfo) {
         streamInfo.viewers.delete(clientId)
+        if (client.role === "viewer") {
+          const count = streamInfo.viewers.size
+          db.collection(STREAMS_COLLECTION).doc(client.streamId).update({ viewerCount: count }).catch(() => {})
+
+          const payloadCount = JSON.stringify({ type: "viewer-count", count, streamId: client.streamId })
+          streamInfo.viewers.forEach(v => {
+            const viewerClient = clients.get(v)
+            if (viewerClient) viewerClient.ws.send(payloadCount)
+          })
+          if (streamInfo.broadcasterId) {
+            const broadcaster = clients.get(streamInfo.broadcasterId)
+            if (broadcaster) broadcaster.ws.send(payloadCount)
+          }
+        }
       }
     }
   })
@@ -193,3 +239,16 @@ closeOrphanedLiveStreams().then(() => {
     console.log(`Server running on port ${PORT}`)
   })
 })
+
+// Cleanup expired tokens every hour
+setInterval(async () => {
+  const deletedResets = await cleanupExpiredTokens()
+  if (deletedResets > 0) {
+    console.log(`[Maintenance] Cleaned up ${deletedResets} expired reset token(s)`)
+  }
+
+  const deletedVerifications = await cleanupExpiredVerificationTokens()
+  if (deletedVerifications > 0) {
+    console.log(`[Maintenance] Cleaned up ${deletedVerifications} expired verification token(s)`)
+  }
+}, 60 * 60 * 1000) // every 1 hour

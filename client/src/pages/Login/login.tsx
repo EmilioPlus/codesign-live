@@ -1,12 +1,14 @@
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "../../context/AuthContext"
+import { ForgotPasswordModal } from "@/components/ForgotPasswordModal"
 
 export default function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
 
@@ -61,6 +63,13 @@ export default function Login() {
               className="w-full bg-surface-muted text-copy px-3 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-brand"
               placeholder="••••••••"
             />
+            <button
+              type="button"
+              onClick={() => setIsForgotModalOpen(true)}
+              className="mt-1 text-xs text-brand hover:underline"
+            >
+              ¿Olvidaste tu contraseña?
+            </button>
           </div>
           <button
             type="submit"
@@ -84,6 +93,11 @@ export default function Login() {
           </Link>
         </p>
       </div>
+
+      <ForgotPasswordModal
+        isOpen={isForgotModalOpen}
+        onClose={() => setIsForgotModalOpen(false)}
+      />
     </div>
   )
 }

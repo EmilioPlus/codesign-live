@@ -20,6 +20,14 @@ export default function MainLayout() {
               >
                 {user?.name}
               </Link>
+              {user?.role === "super_admin" && (
+                <Link
+                  to="/admin"
+                  className="px-3 py-1.5 rounded-lg bg-surface-muted text-copy text-sm hover:bg-surface border border-border transition-colors border-brand/50 text-brand font-medium"
+                >
+                  Panel Admin
+                </Link>
+              )}
               <Link
                 to="/stream"
                 className="px-3 py-1.5 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover transition-colors"

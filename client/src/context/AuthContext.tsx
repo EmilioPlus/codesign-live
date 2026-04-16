@@ -15,7 +15,7 @@ type AuthContextValue = {
   user: User | null
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (name: string, email: string, password: string) => Promise<void>
+  register: (name: string, email: string, password: string) => Promise<{ success: boolean; message: string }>
   logout: () => void
   setUserFromServer: (user: User, token?: string) => void
 }
@@ -70,9 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const register = async (name: string, email: string, password: string) => {
-    const { user, token } = await registerApi({ name, email, password })
-    sessionStorage.setItem(AUTH_KEY, JSON.stringify({ user, token }))
-    setUser(user)
+    const data = await registerApi({ name, email, password })
+    return data
   }
 
   const logout = () => {
