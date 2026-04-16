@@ -1,4 +1,8 @@
 client/node_modules/ 
 server/node_modules
 server/FirebaseKey.json
+server/Firebasekey.json
+**/Firebasekey.json
+**/FirebaseKey.json
 node_modules/
+**/.env

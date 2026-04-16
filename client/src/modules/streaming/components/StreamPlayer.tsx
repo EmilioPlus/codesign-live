@@ -1,8 +1,19 @@
 import { useRef, useState, useCallback, useEffect } from "react"
-import { createStreamApi, endStreamApi } from "../../../services/api"
+import {
+  createStreamApi,
+  endStreamApi,
+  updateStreamMetadataApi,
+  getForumResultsApi,
+  uploadFileApi,
+  type ForumResults,
+  WS_URL,
+} from "../../../services/api"
+import { useStreamRoom } from "../../../context/StreamRoomContext"
 import StudioPanels, { type SceneId } from "./studio/StudioPanels"
+import ProjectViewerOverlay from "./ProjectViewerOverlay"
 
 export default function StreamPlayer() {
+  const { setBroadcasterStreamId, addMessage, registerWs, activeForum, setActiveForum, setIsCreatingForum, exclusiveUser, setExclusiveUser, revokeExclusiveViewer } = useStreamRoom()
   const screenVideoRef = useRef<HTMLVideoElement>(null)
   const cameraVideoRef = useRef<HTMLVideoElement>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
@@ -12,14 +23,33 @@ export default function StreamPlayer() {
   const streamIdRef = useRef<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map())
+  const pendingIceCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map())
+  
+  // Exclusividad
+  const exclusivePcRef = useRef<RTCPeerConnection | null>(null)
+  const exclusiveAudioElRef = useRef<HTMLAudioElement | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const pendingExclusiveIceRef = useRef<RTCIceCandidateInit[]>([])
 
   const [isStreaming, setIsStreaming] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Puntero Láser
+  const [pointerAllowed, setPointerAllowed] = useState(false)
+  const [pointerPos, setPointerPos] = useState<{ x: number; y: number } | null>(null)
+  
   const [starting, setStarting] = useState(false)
   const [cameraOn, setCameraOn] = useState(false)
   const [micMuted, setMicMuted] = useState(false)
   const [activeSceneId, setActiveSceneId] = useState<SceneId>("gameplay")
+  const [streamDescription, setStreamDescription] = useState("")
+  const [streamThumbnailUrl, setStreamThumbnailUrl] = useState("")
+  const [savingMetadata, setSavingMetadata] = useState(false)
+  const [uploadingThumb, setUploadingThumb] = useState(false)
+  const [forumResults, setForumResults] = useState<ForumResults | null>(null)
+  const [forumResultsLoading, setForumResultsLoading] = useState(false)
+  const [viewerCount, setViewerCount] = useState(0)
 
   // Asignar stream de pantalla al video cuando el elemento ya está en el DOM (isStreaming=true)
   useEffect(() => {
@@ -145,8 +175,111 @@ export default function StreamPlayer() {
 
       if (!streamIdRef.current || msg.streamId !== streamIdRef.current) return
 
+      // --- Exclusividad ---
+      if (msg.type === "exclusive-offer" && msg.sdp) {
+        const fromId = msg.fromId as string
+        const excPc = new RTCPeerConnection(rtcConfig)
+        exclusivePcRef.current = excPc
+
+        excPc.onicecandidate = (event) => {
+          if (event.candidate) {
+            sendSignal({
+              type: "exclusive-ice-candidate",
+              streamId: streamIdRef.current,
+              targetId: fromId,
+              candidate: event.candidate,
+            })
+          }
+        }
+
+        excPc.ontrack = (event) => {
+          const remoteStream = event.streams[0]
+          if (!remoteStream) return
+
+          // Reproducir para el transmisor localmente
+          const audioEl = new Audio()
+          audioEl.srcObject = remoteStream
+          audioEl.play().catch(() => {})
+          exclusiveAudioElRef.current = audioEl
+          
+          setExclusiveUser({ clientId: fromId, userName: "Invitado Exclusivo" })
+
+          // Web Audio API Mezcla (Mic local + remoto -> todos los viewers)
+          if (cameraStreamRef.current) {
+            const ctx = new AudioContext()
+            audioCtxRef.current = ctx
+            const dest = ctx.createMediaStreamDestination()
+
+            const localSource = ctx.createMediaStreamSource(cameraStreamRef.current)
+            localSource.connect(dest)
+
+            const remoteSource = ctx.createMediaStreamSource(remoteStream)
+            remoteSource.connect(dest)
+
+            const mixedTrack = dest.stream.getAudioTracks()[0]
+            
+            // Reemplazar la pista de audio a todos los espectadores de forma silenciosa
+            peersRef.current.forEach((pc) => {
+              const sender = pc.getSenders().find((s) => s.track && s.track.kind === "audio")
+              if (sender && mixedTrack) {
+                sender.replaceTrack(mixedTrack).catch(() => {})
+              }
+            })
+          }
+        }
+
+        await excPc.setRemoteDescription(new RTCSessionDescription(msg.sdp))
+        while (pendingExclusiveIceRef.current.length > 0) {
+          const c = pendingExclusiveIceRef.current.shift()
+          if (c) await excPc.addIceCandidate(new RTCIceCandidate(c))
+        }
+
+        const answer = await excPc.createAnswer()
+        await excPc.setLocalDescription(answer)
+        sendSignal({
+          type: "exclusive-answer",
+          streamId: streamIdRef.current,
+          targetId: fromId,
+          sdp: answer,
+        })
+        return
+      }
+
+      if (msg.type === "exclusive-ice-candidate" && msg.candidate) {
+        const excPc = exclusivePcRef.current
+        if (excPc) {
+          if (excPc.remoteDescription) {
+            await excPc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {})
+          } else {
+            pendingExclusiveIceRef.current.push(msg.candidate)
+          }
+        }
+        return
+      }
+      // --------------------
+
+      if (msg.type === "pointer-move") {
+        setPointerPos({ x: msg.x, y: msg.y })
+        return
+      }
+
+      if (msg.type === "chat-message") {
+        addMessage({
+          text: msg.text,
+          userName: msg.userName ?? "Anónimo",
+          clientId: msg.clientId,
+          timestamp: msg.timestamp ?? Date.now(),
+        })
+        return
+      }
+
       if (msg.type === "viewer-joined") {
         await createPeerForViewer(msg.viewerId as string)
+        return
+      }
+
+      if (msg.type === "viewer-count") {
+        setViewerCount(msg.count ?? 0)
         return
       }
 
@@ -155,6 +288,12 @@ export default function StreamPlayer() {
         const pc = peersRef.current.get(fromId)
         if (!pc || !msg.sdp) return
         await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp))
+        
+        const pending = pendingIceCandidatesRef.current.get(fromId) || []
+        while (pending.length > 0) {
+          const cand = pending.shift()
+          if (cand) await pc.addIceCandidate(new RTCIceCandidate(cand))
+        }
         return
       }
 
@@ -163,19 +302,25 @@ export default function StreamPlayer() {
         const pc = peersRef.current.get(fromId)
         if (!pc || !msg.candidate) return
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
+          if (pc.remoteDescription) {
+            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
+          } else {
+            const arr = pendingIceCandidatesRef.current.get(fromId) || []
+            arr.push(msg.candidate)
+            pendingIceCandidatesRef.current.set(fromId, arr)
+          }
         } catch {
           // ignore ice errors
         }
         return
       }
     },
-    [createPeerForViewer]
+    [createPeerForViewer, addMessage]
   )
 
   const connectSignaling = useCallback(() => {
     if (!streamIdRef.current || wsRef.current) return
-    const ws = new WebSocket("ws://localhost:4000/ws")
+    const ws = new WebSocket(WS_URL)
     ws.onopen = () => {
       ws.send(
         JSON.stringify({
@@ -191,11 +336,26 @@ export default function StreamPlayer() {
     }
     ws.onclose = () => {
       wsRef.current = null
+      registerWs(null)
       peersRef.current.forEach((pc) => pc.close())
       peersRef.current.clear()
+      if (exclusivePcRef.current) {
+        exclusivePcRef.current.close()
+        exclusivePcRef.current = null
+      }
+      if (exclusiveAudioElRef.current) {
+        exclusiveAudioElRef.current.pause()
+        exclusiveAudioElRef.current = null
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close()
+        audioCtxRef.current = null
+      }
+      setExclusiveUser(null)
     }
     wsRef.current = ws
-  }, [handleSignalMessage])
+    registerWs(ws)
+  }, [handleSignalMessage, registerWs, setExclusiveUser])
 
   const startStream = useCallback(async () => {
     setError(null)
@@ -203,9 +363,10 @@ export default function StreamPlayer() {
     try {
       const { stream } = await createStreamApi()
       streamIdRef.current = stream.id
+      setBroadcasterStreamId(stream.id)
 
       await startScreenCapture()
-       connectSignaling()
+      connectSignaling()
       setIsStreaming(true)
     } catch (e) {
       const message = e instanceof Error ? e.message : "No se pudo iniciar la transmisión"
@@ -213,7 +374,7 @@ export default function StreamPlayer() {
     } finally {
       setStarting(false)
     }
-  }, [startScreenCapture])
+  }, [startScreenCapture, setBroadcasterStreamId, connectSignaling])
 
   const stopStream = useCallback(async () => {
     const sid = streamIdRef.current
@@ -232,12 +393,32 @@ export default function StreamPlayer() {
       cameraVideoRef.current.srcObject = null
     }
     streamIdRef.current = null
+    setBroadcasterStreamId(null)
+    setActiveForum(null)
+    registerWs(null)
     if (wsRef.current) {
       wsRef.current.close()
       wsRef.current = null
     }
     peersRef.current.forEach((pc) => pc.close())
     peersRef.current.clear()
+    
+    if (exclusivePcRef.current) {
+      exclusivePcRef.current.close()
+      exclusivePcRef.current = null
+    }
+    if (exclusiveAudioElRef.current) {
+      exclusiveAudioElRef.current.pause()
+      exclusiveAudioElRef.current = null
+    }
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close()
+      audioCtxRef.current = null
+    }
+    setExclusiveUser(null)
+    setPointerAllowed(false)
+    setPointerPos(null)
+
     setIsStreaming(false)
     setCameraOn(false)
     setError(null)
@@ -248,7 +429,7 @@ export default function StreamPlayer() {
         // ya detuvimos el stream localmente
       }
     }
-  }, [isRecording])
+  }, [isRecording, setBroadcasterStreamId, registerWs, setActiveForum])
 
   const startRecording = useCallback(() => {
     const baseStream = screenStreamRef.current
@@ -284,10 +465,40 @@ export default function StreamPlayer() {
     setIsRecording(false)
   }, [])
 
+  const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const isImage = file.type.startsWith('image/')
+    if (!isImage) {
+      alert("Solo se soportan imágenes (jpg, png, etc.) para la miniatura.")
+      e.target.value = ""
+      return
+    }
+    setUploadingThumb(true)
+    try {
+      const { fileUrl } = await uploadFileApi(file)
+      setStreamThumbnailUrl(fileUrl)
+      
+      const sid = streamIdRef.current
+      if (sid) {
+        await updateStreamMetadataApi(sid, {
+          description: streamDescription || undefined,
+          thumbnailUrl: fileUrl,
+        })
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al subir la miniatura")
+    } finally {
+      setUploadingThumb(false)
+      e.target.value = ""
+    }
+  }
+
   return (
     <div className="w-full h-full flex flex-col gap-4">
       {/* Área de video (Preview / Canvas) */}
-      <div className="flex-1 min-h-0 flex items-center justify-center bg-surface-muted rounded-lg overflow-hidden relative">
+      <div className="flex-1 min-h-[400px] flex items-center justify-center bg-surface-muted rounded-lg overflow-hidden relative">
+        <ProjectViewerOverlay />
         {!isStreaming ? (
           <div className="flex flex-col items-center justify-center gap-3 text-center p-6">
             <p className="text-copy-muted">
@@ -314,6 +525,23 @@ export default function StreamPlayer() {
                 muted
                 className="absolute bottom-4 right-4 w-48 h-32 rounded-lg border border-border bg-black object-cover shadow-lg"
               />
+            )}
+            
+            {/* Renderizado del Cursor Láser del Usuario Exclusivo */}
+            {pointerPos && exclusiveUser && pointerAllowed && (
+              <div
+                className="absolute z-40 pointer-events-none flex flex-col items-center"
+                style={{
+                  left: `${pointerPos.x * 100}%`,
+                  top: `${pointerPos.y * 100}%`,
+                  transform: 'translate(-50%, -50%)'
+                }}
+              >
+                <div className="w-3 h-3 bg-red-500 rounded-full shadow-[0_0_12px_rgba(239,68,68,1)] animate-pulse" />
+                <span className="mt-1 text-[10px] font-bold text-white bg-red-600/90 px-1.5 py-0.5 rounded shadow whitespace-nowrap">
+                  {exclusiveUser.userName}
+                </span>
+              </div>
             )}
           </>
         )}
@@ -362,6 +590,62 @@ export default function StreamPlayer() {
                 Detener grabación
               </button>
             )}
+            
+            {/* Panel de Usuario Exclusivo */}
+            {exclusiveUser && (
+              <div className="flex items-center gap-3 px-3 py-1.5 bg-brand/10 border border-brand/30 rounded-lg ml-2">
+                <span className="text-sm font-semibold text-brand animate-pulse">
+                  🎙 {exclusiveUser.userName}
+                </span>
+
+                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-copy-muted hover:text-copy border-l border-brand/20 pl-3">
+                  <input
+                    type="checkbox"
+                    checked={pointerAllowed}
+                    onChange={(e) => {
+                      const allowed = e.target.checked
+                      setPointerAllowed(allowed)
+                      if (!allowed) setPointerPos(null)
+                      if (wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({
+                          type: "pointer-permission",
+                          streamId: streamIdRef.current,
+                          targetId: exclusiveUser.clientId,
+                          allowed
+                        }))
+                      }
+                    }}
+                    className="accent-brand"
+                  />
+                  Puntero Láser
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    revokeExclusiveViewer()
+                    if (exclusivePcRef.current) exclusivePcRef.current.close()
+                    if (exclusiveAudioElRef.current) exclusiveAudioElRef.current.pause()
+                    if (audioCtxRef.current) audioCtxRef.current.close()
+                    setExclusiveUser(null)
+                    setPointerAllowed(false)
+                    setPointerPos(null)
+                    
+                    // Restaurar mic propio a los peers
+                    peersRef.current.forEach(pc => {
+                       const sender = pc.getSenders().find((s) => s.track && s.track.kind === "audio")
+                       const ownMic = cameraStreamRef.current?.getAudioTracks()[0]
+                       if (sender && ownMic) {
+                         sender.replaceTrack(ownMic).catch(()=>{})
+                       }
+                    })
+                  }}
+                  className="px-2 py-1 bg-danger text-white text-xs rounded hover:bg-danger-hover transition-colors"
+                >
+                  Expulsar
+                </button>
+              </div>
+            )}
             {isRecording && (
               <span className="text-sm text-copy-muted flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-danger animate-pulse" />
@@ -370,6 +654,43 @@ export default function StreamPlayer() {
             )}
 
             <div className="ml-auto flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-brand px-3 py-1.5 bg-brand/10 border border-brand/20 rounded-lg flex items-center gap-1.5" title="Espectadores en vivo">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                {viewerCount}
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  const sid = streamIdRef.current
+                  if (!sid) return
+                  setSavingMetadata(true)
+                  try {
+                    await updateStreamMetadataApi(sid, {
+                      description: streamDescription || undefined,
+                      thumbnailUrl: streamThumbnailUrl || null,
+                    })
+                    alert("¡Cambios guardados exitosamente!")
+                  } catch (e) {
+                    alert("Hubo un error al guardar los cambios.")
+                  } finally {
+                    setSavingMetadata(false)
+                  }
+                }}
+                disabled={savingMetadata}
+                className="px-3 py-1.5 rounded-lg bg-surface-muted text-copy text-xs font-medium hover:bg-surface border border-border disabled:opacity-50"
+              >
+                {savingMetadata ? "Guardando…" : "Guardar cambios"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreatingForum(true)}
+                className="px-3 py-1.5 rounded-lg bg-surface-muted text-copy text-xs font-medium hover:bg-surface border border-border transition-colors"
+              >
+                Crear foro
+              </button>
               <button
                 type="button"
                 onClick={toggleCamera}
@@ -389,6 +710,118 @@ export default function StreamPlayer() {
           </>
         )}
       </div>
+
+      {/* Descripción y miniatura (visible en transmisión) */}
+      {isStreaming && (
+        <div className="p-3 bg-surface-panel rounded-lg border border-border space-y-2">
+          <p className="text-xs font-medium text-copy-muted">Descripción y miniatura (se muestran en la lista de transmisiones)</p>
+          <div className="flex flex-wrap gap-2 items-center">
+            <input
+              type="text"
+              placeholder="Descripción de la transmisión"
+              value={streamDescription}
+              onChange={(e) => setStreamDescription(e.target.value)}
+              className="flex-1 min-w-[200px] bg-surface-muted text-copy text-sm p-2 h-[42px] rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+            <div className="relative flex items-center bg-surface-muted rounded-lg border border-border px-3 gap-2 flex-1 min-w-[200px] h-[42px]">
+              <span className="text-sm text-copy-muted line-clamp-1 flex-1">
+                {streamThumbnailUrl ? "Miniatura cargada" : "Sin miniatura"}
+              </span>
+              <label className={`cursor-pointer text-xs font-medium px-2 py-1.5 rounded bg-brand text-white hover:bg-brand-hover transition-colors ${uploadingThumb ? 'opacity-50 pointer-events-none' : ''}`}>
+                {uploadingThumb ? "Subiendo..." : "Subir imagen"}
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={handleThumbnailUpload} 
+                />
+              </label>
+              {streamThumbnailUrl && (
+                <button 
+                  onClick={async () => {
+                    setStreamThumbnailUrl("")
+                    const sid = streamIdRef.current
+                    if (sid) {
+                      try {
+                        await updateStreamMetadataApi(sid, {
+                          description: streamDescription || undefined,
+                          thumbnailUrl: null,
+                        })
+                      } catch (e) {}
+                    }
+                  }}
+                  className="text-copy-muted hover:text-danger ml-1 font-bold"
+                  title="Eliminar miniatura"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+      {activeForum && (
+        <div className="p-3 bg-surface-panel rounded-lg border border-border space-y-2">
+          <p className="text-xs font-medium text-copy-muted">
+            Foro activo: {activeForum.title} (visible 30 min para espectadores)
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                setForumResultsLoading(true)
+                try {
+                  const data = await getForumResultsApi(activeForum.id)
+                  setForumResults(data)
+                } finally {
+                  setForumResultsLoading(false)
+                }
+              }}
+              disabled={forumResultsLoading}
+              className="px-3 py-1.5 rounded-lg bg-surface-muted text-copy text-xs font-medium hover:bg-surface border border-border disabled:opacity-50"
+            >
+              {forumResultsLoading ? "Cargando…" : "Ver resultados"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {forumResults && (
+        <div className="p-3 bg-surface-panel rounded-lg border border-border space-y-3">
+          <p className="font-medium text-copy">Resultados del foro: {forumResults.forum.title}</p>
+          {forumResults.results ? (
+            <ul className="space-y-1 text-sm">
+              {forumResults.results.map((r) => (
+                <li key={r.optionId} className="flex justify-between text-copy">
+                  <span>{r.text}</span>
+                  <span className="text-copy-muted">{r.count} votos</span>
+                </li>
+              ))}
+            </ul>
+          ) : forumResults.posts && forumResults.posts.length > 0 ? (
+            <ul className="space-y-2 text-sm max-h-40 overflow-y-auto">
+              {forumResults.posts.map((p) => (
+                <li key={p.id} className="bg-surface-muted p-2 rounded">
+                  <span className="font-medium text-copy-muted">{p.userName}:</span>{" "}
+                  <span className="text-copy">{p.text}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-copy-muted">Sin participación aún.</p>
+          )}
+          <button
+            type="button"
+            onClick={() => setForumResults(null)}
+            className="text-xs text-copy-muted hover:text-copy"
+          >
+            Cerrar resultados
+          </button>
+        </div>
+      )}
 
       {/* Paneles estilo OBS: Escenas, Fuentes, Audio */}
       <StudioPanels

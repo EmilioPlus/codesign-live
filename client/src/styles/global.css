@@ -10,3 +10,13 @@
   }
 }
 
+/* Ocultar las barras de scroll para mejorar la estética */
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  background: transparent;
+}
+* {
+  scrollbar-width: none; /* Firefox */
+}
+
