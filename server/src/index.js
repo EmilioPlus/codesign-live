@@ -51,7 +51,7 @@ wss.on("connection", (ws) => {
 
       let streamInfo = streams.get(msg.streamId)
       if (!streamInfo) {
-        streamInfo = { broadcasterId: null, viewers: new Set() }
+        streamInfo = { broadcasterId: null, viewers: new Set(), chatHistory: [] }
         streams.set(msg.streamId, streamInfo)
       }
 
@@ -92,6 +92,14 @@ wss.on("connection", (ws) => {
           role: msg.role,
         })
       )
+
+      if (streamInfo.chatHistory && streamInfo.chatHistory.length > 0) {
+        ws.send(JSON.stringify({
+          type: "chat-history",
+          streamId: msg.streamId,
+          messages: streamInfo.chatHistory
+        }))
+      }
       return
     }
 
@@ -119,14 +127,21 @@ wss.on("connection", (ws) => {
       if (client.streamId !== msg.streamId) return
       const streamInfo = streams.get(msg.streamId)
       if (!streamInfo) return
-      const payload = JSON.stringify({
+      const chatMsg = {
         type: "chat-message",
         streamId: msg.streamId,
         text: msg.text.slice(0, 2000),
         userName: msg.userName || "Anónimo",
         clientId,
         timestamp: Date.now(),
-      })
+      }
+      const payload = JSON.stringify(chatMsg)
+
+      if (!streamInfo.chatHistory) streamInfo.chatHistory = []
+      streamInfo.chatHistory.push(chatMsg)
+      if (streamInfo.chatHistory.length > 300) {
+        streamInfo.chatHistory.shift()
+      }
       streamInfo.viewers.forEach((viewerId) => {
         const viewer = clients.get(viewerId)
         if (viewer) viewer.ws.send(payload)

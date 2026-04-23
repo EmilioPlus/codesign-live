@@ -3,6 +3,44 @@ import { useStreamRoom } from "../../../context/StreamRoomContext"
 import { Canvas } from "@react-three/fiber"
 import { OrbitControls, Stage, useGLTF, Html, useProgress } from "@react-three/drei"
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch"
+import { Component, type ErrorInfo, type ReactNode } from "react"
+
+// Error Boundary para evitar que toda la app colapse si un modelo 3D falla (ej: faltan archivos .bin)
+class ModelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, errorMsg: string }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false, errorMsg: "" }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, errorMsg: error.message }
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Error cargando modelo 3D:", error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Html center>
+          <div className="bg-surface-panel p-6 rounded-xl border border-danger/50 text-center shadow-2xl max-w-sm">
+            <div className="w-12 h-12 rounded-full bg-danger/20 flex items-center justify-center text-danger mx-auto mb-3">
+              ✕
+            </div>
+            <h3 className="text-white font-bold mb-2">Error al cargar el modelo</h3>
+            <p className="text-sm text-copy-muted mb-4">
+              Asegúrate de subir archivos <strong className="text-brand">.glb</strong> autocontenidos. 
+              Si subes un .gltf que requiere archivos externos (.bin o texturas), no funcionará porque solo se subió el archivo principal.
+            </p>
+            <p className="text-xs text-danger/80 break-words mb-4">{this.state.errorMsg}</p>
+          </div>
+        </Html>
+      )
+    }
+    return this.props.children
+  }
+}
 
 // Componente para cargar el modelo GLTF y mostrar un loader
 function Model({ url }: { url: string }) {
@@ -48,11 +86,13 @@ export default function ProjectViewerOverlay() {
       <div className="flex-1 w-full min-h-0 cursor-move relative flex flex-col items-center justify-center">
         {activeProject.type === "3d" ? (
           <Canvas shadows camera={{ position: [0, 0, 5], fov: 50 }}>
-            <Suspense fallback={<Loader />}>
-              <Stage environment="city" intensity={0.6}>
-                <Model url={activeProject.fileUrl} />
-              </Stage>
-            </Suspense>
+            <ModelErrorBoundary>
+              <Suspense fallback={<Loader />}>
+                <Stage environment="city" intensity={0.6}>
+                  <Model url={activeProject.fileUrl} />
+                </Stage>
+              </Suspense>
+            </ModelErrorBoundary>
             <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
           </Canvas>
         ) : (
@@ -76,14 +116,7 @@ export default function ProjectViewerOverlay() {
         )}
       </div>
 
-      {/* Controles Info Inferior */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-surface-panel/80 px-4 py-2 rounded-full border border-border backdrop-blur-sm shadow-xl text-center pointer-events-none">
-        <span className="text-sm text-copy font-medium">
-          {activeProject.type === "3d"
-            ? "🖱 Haz clic y arrastra para rotar • Rueda para Zoom"
-            : "🖱 Arrastra para mover • Rueda para Zoom"}
-        </span>
-      </div>
+
     </div>
   )
 }

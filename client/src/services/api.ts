@@ -305,3 +305,84 @@ export const deleteProjectApi = async (projectId: string): Promise<{ message: st
   })
   return handleResponse(response)
 }
+
+// ── STREAMER SOCIAL ──────────────────────────────────────────────────────────
+
+export interface StreamerGoal {
+  title: string
+  current: number
+  target: number
+  icon?: string
+}
+
+export interface StreamerProfile {
+  id: string
+  name: string
+  avatarUrl: string | null
+  followerCount: number
+  subscriberCount: number
+  bio: string
+  goals: StreamerGoal[]
+}
+
+export const getStreamerProfileApi = async (streamerId: string): Promise<StreamerProfile> => {
+  const response = await fetch(`${API_URL}/streamer/${streamerId}/profile`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(response)
+}
+
+export const updateStreamerProfileApi = async (data: { bio?: string; goals?: StreamerGoal[] }) => {
+  const response = await fetch(`${API_URL}/streamer/profile`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  })
+  return handleResponse(response)
+}
+
+export const toggleFollowApi = async (streamerId: string): Promise<{ following: boolean; followerCount: number }> => {
+  const response = await fetch(`${API_URL}/streamer/${streamerId}/follow`, {
+    method: "POST",
+    headers: authHeaders(),
+  })
+  return handleResponse(response)
+}
+
+export const getFollowStatusApi = async (streamerId: string): Promise<{ following: boolean; followerCount: number }> => {
+  const response = await fetch(`${API_URL}/streamer/${streamerId}/follow-status`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(response)
+}
+
+export const subscribeToStreamerApi = async (streamerId: string): Promise<{ subscribed: boolean; subscriberCount: number }> => {
+  const response = await fetch(`${API_URL}/streamer/${streamerId}/subscribe`, {
+    method: "POST",
+    headers: authHeaders(),
+  })
+  return handleResponse(response)
+}
+
+export const getSubscribeStatusApi = async (streamerId: string): Promise<{ subscribed: boolean; subscriberCount: number }> => {
+  const response = await fetch(`${API_URL}/streamer/${streamerId}/subscribe-status`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(response)
+}
+
+export const giftSubscriptionApi = async (streamerId: string, recipientName: string) => {
+  const response = await fetch(`${API_URL}/streamer/${streamerId}/gift-sub`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ recipientName }),
+  })
+  return handleResponse(response)
+}
+
+export const searchUsersForGiftApi = async (streamerId: string, q: string): Promise<{ users: { id: string; name: string; avatarUrl: string | null }[] }> => {
+  const response = await fetch(`${API_URL}/streamer/${streamerId}/search-users?q=${encodeURIComponent(q)}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(response)
+}

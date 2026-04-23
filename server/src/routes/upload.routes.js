@@ -22,8 +22,8 @@ const fileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase()
   const mimeType = file.mimetype
 
-  // Both extension and MIME type must match
-  if (VALID_EXTENSIONS[ext] && VALID_EXTENSIONS[ext] === mimeType) {
+  // Both extension and MIME type must match for images, but browsers often send application/octet-stream for 3D models
+  if (VALID_EXTENSIONS[ext]) {
     cb(null, true)
   } else {
     cb(new Error("Formato inválido. Solo se admiten imágenes (.jpg, .png, .webp) y modelos 3D (.glb, .gltf)."))

@@ -9,10 +9,13 @@ import {
   WS_URL,
 } from "../../../services/api"
 import { useStreamRoom } from "../../../context/StreamRoomContext"
+import { useAuth } from "../../../context/AuthContext"
 import StudioPanels, { type SceneId } from "./studio/StudioPanels"
 import ProjectViewerOverlay from "./ProjectViewerOverlay"
+import StreamerProfilePanel from "./StreamerProfilePanel"
 
 export default function StreamPlayer() {
+  const { user } = useAuth()
   const { setBroadcasterStreamId, addMessage, registerWs, activeForum, setActiveForum, setIsCreatingForum, exclusiveUser, setExclusiveUser, revokeExclusiveViewer } = useStreamRoom()
   const screenVideoRef = useRef<HTMLVideoElement>(null)
   const cameraVideoRef = useRef<HTMLVideoElement>(null)
@@ -269,6 +272,18 @@ export default function StreamPlayer() {
           userName: msg.userName ?? "Anónimo",
           clientId: msg.clientId,
           timestamp: msg.timestamp ?? Date.now(),
+        })
+        return
+      }
+
+      if (msg.type === "chat-history" && Array.isArray(msg.messages)) {
+        msg.messages.forEach((m: any) => {
+          addMessage({
+            text: m.text,
+            userName: m.userName ?? "Anónimo",
+            clientId: m.clientId,
+            timestamp: m.timestamp ?? Date.now(),
+          })
         })
         return
       }
@@ -553,7 +568,7 @@ export default function StreamPlayer() {
         </p>
       )}
 
-      {/* Barra de controles (tipo panel OBS) */}
+      {/* Controles Transmisor */}
       <div className="flex flex-wrap items-center gap-3 p-3 bg-surface-panel rounded-lg border border-border">
         {!isStreaming ? (
           <button
@@ -833,6 +848,22 @@ export default function StreamPlayer() {
         onToggleCamera={toggleCamera}
         onToggleMic={toggleMic}
       />
+
+      {/* Perfil del Transmisor (Visible para el propio streamer) */}
+      {user && (
+        <StreamerProfilePanel
+          streamerId={user.id}
+          streamerName={user.name}
+          streamerAvatarUrl={user.avatarUrl}
+          isBroadcaster={true}
+          viewerCount={viewerCount}
+          // Pasamos el panel mute function solo para que coincida con props
+          isMuted={micMuted} 
+          onToggleMute={toggleMic}
+          streamTitle={streamDescription || "Mi transmisión"}
+          streamCategories={["CoDesign"]} // o desde estado de backend si quisieras añadirlo más tarde
+        />
+      )}
     </div>
   )
 }

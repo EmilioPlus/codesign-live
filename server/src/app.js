@@ -9,6 +9,7 @@ import ForumsRoutes from "./routes/forums.routes.js"
 import UploadRoutes from "./routes/upload.routes.js"
 import ProjectsRoutes from "./routes/projects.routes.js"
 import AdminRoutes from "./routes/admin.routes.js"
+import StreamerRoutes from "./routes/streamer.routes.js"
 import { errorHandler } from "./middlewares/middleware.error.js"
 import { notFound } from "./middlewares/middleware.notFound.js"
 import path from "path"
@@ -51,6 +52,7 @@ app.use("/api/forums", ForumsRoutes)
 app.use("/api/upload", UploadRoutes)
 app.use("/api/projects", ProjectsRoutes)
 app.use("/api/admin", AdminRoutes)
+app.use("/api/streamer", StreamerRoutes)
 
 // Serve local uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")))
