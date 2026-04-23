@@ -1,0 +1,22 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-copy;
+  }
+}
+
+/* Ocultar las barras de scroll para mejorar la estética */
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  background: transparent;
+}
+* {
+  scrollbar-width: none; /* Firefox */
+}
+
