@@ -1,6 +1,6 @@
 import transporter, { isEmailEnabled } from "../../config/email.js"
 
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173"
+const FRONTEND_URL = process.env.CLIENT_URL || "http://localhost:5173"
 const APP_NAME = "CoDesign LIVE"
 
 export const sendPasswordResetEmail = async (email, resetToken, userId) => {
