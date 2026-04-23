@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { forgotPasswordApi } from "@/services/api"
+import { forgotPasswordApi } from "../services/api"
 
 interface ForgotPasswordModalProps {
   isOpen: boolean

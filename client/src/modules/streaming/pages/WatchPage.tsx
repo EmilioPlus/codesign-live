@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams, Link } from "react-router-dom"
 import { useStreamRoom } from "../../../context/StreamRoomContext"
-import { getActiveForumApi, WS_URL } from "../../../services/api"
+import { getActiveForumApi, WS_URL, authHeaders } from "../../../services/api"
 import ProjectViewerOverlay from "../components/ProjectViewerOverlay"
+import StreamerProfilePanel from "../components/StreamerProfilePanel"
 
 const rtcConfig: RTCConfiguration = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -33,8 +34,18 @@ export default function WatchPage() {
   const [inviteFromId, setInviteFromId] = useState<string | null>(null)
   const [inviteUserName, setInviteUserName] = useState<string>("")
 
+  // Estado info del streamer (obtenida via API)
+  const [streamData, setStreamData] = useState<{
+    userId: string
+    userName: string
+    userAvatarUrl: string | null
+    title: string
+    categories: string[]
+  } | null>(null)
+  const [streamTitle, setStreamTitle] = useState<string>("")  // título efímero via WS
+
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!pointerAllowedRef.current || !exclusivePcRef.current) return
+    if (!pointerAllowedRef.current) return
     
     // Throttle de 50ms para no saturar al enviarlo (20 fps max)
     const now = Date.now()
@@ -143,6 +154,24 @@ export default function WatchPage() {
         })
       )
       getActiveForumApi(streamId).then(({ forum }) => setActiveForum(forum))
+      // Fetch info del stream (userId del transmisor, nombre, avatar)
+      fetch(`${import.meta.env.VITE_API_URL || (window.location.origin + '/api')}/streams/${streamId}`, {
+        headers: authHeaders()
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data?.userId) {
+            setStreamData({
+              userId: data.userId,
+              userName: data.user || data.userName || "",
+              userAvatarUrl: data.userAvatarUrl || null,
+              title: data.title || "",
+              categories: data.categories || []
+            })
+            setStreamTitle(data.title || "")
+          }
+        })
+        .catch(() => {})
     }
 
     ws.onmessage = async (event) => {
@@ -155,12 +184,29 @@ export default function WatchPage() {
 
       if (msg.streamId !== streamId) return
 
+      if (msg.type === "stream-metadata") {
+        setStreamTitle(msg.title || "")
+        return
+      }
+
       if (msg.type === "chat-message") {
         addMessage({
           text: msg.text,
           userName: msg.userName ?? "Anónimo",
           clientId: msg.clientId,
           timestamp: msg.timestamp ?? Date.now(),
+        })
+        return
+      }
+
+      if (msg.type === "chat-history" && Array.isArray(msg.messages)) {
+        msg.messages.forEach((m: any) => {
+          addMessage({
+            text: m.text,
+            userName: m.userName ?? "Anónimo",
+            clientId: m.clientId,
+            timestamp: m.timestamp ?? Date.now(),
+          })
         })
         return
       }
@@ -303,37 +349,11 @@ export default function WatchPage() {
   }, [streamId, addMessage, registerWs, setActiveForum])
 
   return (
-    <div className="h-full flex flex-col gap-4">
-      <div>
-        <h2 className="text-2xl font-semibold text-copy flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            Transmisión en vivo
-            {viewerCount > 0 && (
-              <span className="text-xs font-medium text-brand px-2 py-1 bg-brand/10 border border-brand/20 rounded-md flex items-center gap-1" title="Espectadores en vivo">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                  <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-                {viewerCount}
-              </span>
-            )}
-          </div>
-          <button 
-            type="button" 
-            onClick={() => setIsMuted(m => !m)} 
-            className="text-sm px-3 py-1.5 rounded-lg bg-surface-muted border border-border hover:bg-surface transition-colors"
-          >
-            {isMuted ? "🔇 Activar Sonido" : "🔊 Silenciar"}
-          </button>
-        </h2>
-        <p className="text-copy-muted text-sm">
-          Estás viendo esta transmisión en tiempo real.
-        </p>
-      </div>
+    <div className="flex flex-col space-y-4 w-full">
 
-      {/* Contenedor del video con el mismo estilo del StreamPlayer (sin bordes grandes) */}
+      {/* Contenedor del video se ajusta al contenido para evitar espacios negros (letterboxing) forzados */}
       <div 
-        className={`flex-1 min-h-[400px] flex items-center justify-center bg-surface-muted rounded-lg overflow-hidden relative ${pointerAllowedRef.current ? 'cursor-crosshair' : ''}`}
+        className={`w-full bg-black flex justify-center items-center rounded-xl overflow-hidden relative shadow-[0_4px_30px_rgba(0,0,0,0.3)] ${pointerAllowedRef.current ? 'cursor-crosshair' : ''}`}
         onMouseMove={handleMouseMove}
       >
         <ProjectViewerOverlay />
@@ -342,9 +362,9 @@ export default function WatchPage() {
           autoPlay
           playsInline
           muted={isMuted}
-          controls={false}
-          className="w-full h-full object-contain rounded-lg"
+          className="w-full h-auto max-h-[80vh] object-contain pointer-events-none"
         />
+        
         <video
           ref={overlayVideoRef}
           autoPlay
@@ -353,6 +373,7 @@ export default function WatchPage() {
           controls={false}
           className="absolute bottom-4 right-4 w-48 h-32 rounded-lg border border-border bg-black shadow-lg object-cover z-10"
         />
+        
         {error && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
             <p className="text-sm text-danger font-medium bg-surface-panel/90 border border-danger/50 rounded-full px-4 py-2 shadow-xl backdrop-blur-sm flex items-center gap-2">
@@ -396,6 +417,18 @@ export default function WatchPage() {
           </div>
         )}
       </div>
+
+      <StreamerProfilePanel
+        streamerId={streamData?.userId || ""}
+        streamerName={streamData?.userName || ""}
+        streamerAvatarUrl={streamData?.userAvatarUrl}
+        isBroadcaster={false}
+        viewerCount={viewerCount}
+        isMuted={isMuted}
+        onToggleMute={() => setIsMuted(m => !m)}
+        streamTitle={streamTitle || streamData?.title}
+        streamCategories={streamData?.categories}
+      />
 
       <div className="flex justify-start">
         <Link

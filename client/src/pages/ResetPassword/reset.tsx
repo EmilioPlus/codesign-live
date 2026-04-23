@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { resetPasswordApi } from "@/services/api"
+import { resetPasswordApi } from "../../services/api"
 
-interface ResetPasswordParams {
+type ResetPasswordParams = Record<string, string | undefined> & {
   userId?: string
   token?: string
 }
