@@ -50,6 +50,7 @@ type StreamRoomContextValue = {
   messages: ChatMessage[]
   addMessage: (msg: Omit<ChatMessage, "id">) => void
   sendMessage: (text: string, userName: string) => void
+  sendReaction: (emoji: string, userName: string) => void
   registerWs: (ws: WebSocket | null) => void
   activeForum: Forum | null
   setActiveForum: (forum: Forum | null) => void
@@ -106,6 +107,20 @@ export function StreamRoomProvider({
     )
   }, [streamId])
 
+  const sendReaction = useCallback((emoji: string, userName: string) => {
+    if (!streamId) return
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    ws.send(
+      JSON.stringify({
+        type: "reaction",
+        streamId,
+        emoji,
+        userName: userName || "Anónimo",
+      })
+    )
+  }, [streamId])
+
   const registerWs = useCallback((ws: WebSocket | null) => {
     wsRef.current = ws
   }, [])
@@ -147,6 +162,7 @@ export function StreamRoomProvider({
     messages,
     addMessage,
     sendMessage,
+    sendReaction,
     registerWs,
     activeForum,
     setActiveForum,

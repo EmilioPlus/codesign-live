@@ -255,7 +255,7 @@ export default function StreamerProfilePanel({
           </div>
 
           {/* Stats + Actions */}
-          <div className="flex flex-col items-end gap-2 shrink-0">
+          <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto mt-2 sm:mt-0">
             {/* Stats row */}
             <div className="flex items-center gap-3 text-sm font-semibold text-copy">
               <div className="flex items-center gap-1.5 text-red-500">

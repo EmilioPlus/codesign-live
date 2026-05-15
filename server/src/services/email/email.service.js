@@ -5,7 +5,7 @@ const APP_NAME = "CoDesign LIVE"
 
 export const sendPasswordResetEmail = async (email, resetToken, userId) => {
   try {
-    if (!isEmailEnabled() || !transporter) {
+    if (!transporter) {
       console.warn(`[Email] Email service not configured, skipping password reset email for ${email}`)
       return false
     }
@@ -109,7 +109,7 @@ export const sendPasswordResetEmail = async (email, resetToken, userId) => {
 
 export const sendPasswordResetConfirmationEmail = async (email, userName) => {
   try {
-    if (!isEmailEnabled() || !transporter) {
+    if (!transporter) {
       console.warn(`[Email] Email service not configured, skipping confirmation email for ${email}`)
       return false
     }
@@ -187,7 +187,7 @@ export const sendPasswordResetConfirmationEmail = async (email, userName) => {
 
 export const sendVerificationEmail = async (email, verificationToken, userId, userName) => {
   try {
-    if (!isEmailEnabled() || !transporter) {
+    if (!transporter) {
       console.warn(`[Email] Email service not configured, skipping verification email for ${email}`)
       return false
     }
