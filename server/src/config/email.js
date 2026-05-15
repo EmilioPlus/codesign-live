@@ -10,12 +10,10 @@ let _emailEnabled = false
 let transporter = null
 
 /**
- * Returns whether the email service is ready to send messages.
- * Use this function instead of importing the variable directly
- * to avoid the race condition where verify() hasn't resolved yet.
+ * Returns whether the email service has credentials configured.
  */
 export function isEmailEnabled() {
-  return _emailEnabled
+  return transporter !== null
 }
 
 if (!EMAIL_USER || !EMAIL_PASSWORD) {

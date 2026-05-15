@@ -123,6 +123,54 @@ wss.on("connection", (ws) => {
       return
     }
 
+    // Levantar / bajar la mano — reenviar al broadcaster
+    if ((msg.type === "raise-hand" || msg.type === "lower-hand") && msg.streamId) {
+      if (client.streamId !== msg.streamId) return
+      const streamInfo = streams.get(msg.streamId)
+      if (!streamInfo || !streamInfo.broadcasterId) return
+      const broadcaster = clients.get(streamInfo.broadcasterId)
+      if (broadcaster) {
+        broadcaster.ws.send(JSON.stringify({ ...msg, fromId: clientId }))
+      }
+      return
+    }
+
+    // Broadcast: exclusive-active y exclusive-ended → todos los viewers
+    if ((msg.type === "exclusive-active" || msg.type === "exclusive-ended") && msg.streamId) {
+      if (client.streamId !== msg.streamId) return
+      const streamInfo = streams.get(msg.streamId)
+      if (!streamInfo) return
+      const payload = JSON.stringify({ ...msg, fromId: clientId })
+      streamInfo.viewers.forEach(viewerId => {
+        const viewer = clients.get(viewerId)
+        if (viewer) viewer.ws.send(payload)
+      })
+      return
+    }
+
+    // Reacciones emoji — broadcast a todos (viewers + broadcaster)
+    if (msg.type === "reaction" && msg.streamId && msg.emoji) {
+      if (client.streamId !== msg.streamId) return
+      const streamInfo = streams.get(msg.streamId)
+      if (!streamInfo) return
+      const payload = JSON.stringify({
+        type: "reaction",
+        streamId: msg.streamId,
+        emoji: msg.emoji,
+        userName: msg.userName || "Anónimo",
+        clientId,
+      })
+      streamInfo.viewers.forEach(viewerId => {
+        const viewer = clients.get(viewerId)
+        if (viewer) viewer.ws.send(payload)
+      })
+      if (streamInfo.broadcasterId) {
+        const broadcaster = clients.get(streamInfo.broadcasterId)
+        if (broadcaster) broadcaster.ws.send(payload)
+      }
+      return
+    }
+
     if (msg.type === "chat" && msg.streamId && typeof msg.text === "string") {
       if (client.streamId !== msg.streamId) return
       const streamInfo = streams.get(msg.streamId)
@@ -266,4 +314,4 @@ setInterval(async () => {
   if (deletedVerifications > 0) {
     console.log(`[Maintenance] Cleaned up ${deletedVerifications} expired verification token(s)`)
   }
-}, 60 * 60 * 1000) // every 1 hour
+}, 60 * 60 * 1000) // every 1 hour// Trigger restart

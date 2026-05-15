@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { useParams, Link } from "react-router-dom"
 import { useStreamRoom } from "../../../context/StreamRoomContext"
 import { getActiveForumApi, WS_URL, authHeaders } from "../../../services/api"
+import { useAuth } from "../../../context/AuthContext"
 import ProjectViewerOverlay from "../components/ProjectViewerOverlay"
 import StreamerProfilePanel from "../components/StreamerProfilePanel"
 
@@ -11,6 +12,7 @@ const rtcConfig: RTCConfiguration = {
 
 export default function WatchPage() {
   const { streamId } = useParams()
+  const { user } = useAuth()
   const { addMessage, registerWs, setActiveForum } = useStreamRoom()
   const mainVideoRef = useRef<HTMLVideoElement>(null)
   const overlayVideoRef = useRef<HTMLVideoElement>(null)
@@ -33,6 +35,12 @@ export default function WatchPage() {
   // Estado para Modal de Invitación
   const [inviteFromId, setInviteFromId] = useState<string | null>(null)
   const [inviteUserName, setInviteUserName] = useState<string>("")
+
+  // Levantar la mano
+  const [handRaised, setHandRaised] = useState(false)
+
+  // Banner "En Vivo Juntos"
+  const [exclusiveActiveBanner, setExclusiveActiveBanner] = useState<string | null>(null)
 
   // Estado info del streamer (obtenida via API)
   const [streamData, setStreamData] = useState<{
@@ -67,15 +75,33 @@ export default function WatchPage() {
     }
   }
 
+  const exclusiveAudioRef = useRef<HTMLAudioElement | null>(null)
+
   const acceptExclusiveInvite = async () => {
     if (!inviteFromId) return
     const targetBroadcaster = inviteFromId
     setInviteFromId(null)
     try {
-      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       exclusiveMicRef.current = micStream
       const excPc = new RTCPeerConnection(rtcConfig)
       exclusivePcRef.current = excPc
+
+      // ✅ NUEVO: Recibir audio del transmisor y reproducirlo localmente
+      excPc.ontrack = (event) => {
+        const remoteStream = event.streams[0] || new MediaStream([event.track])
+        if (!remoteStream) return
+
+        // Si ya existe un elemento de audio, reutilizarlo
+        let audioEl = exclusiveAudioRef.current
+        if (!audioEl) {
+          audioEl = new Audio()
+          audioEl.autoplay = true
+          exclusiveAudioRef.current = audioEl
+        }
+        audioEl.srcObject = remoteStream
+        audioEl.play().catch(() => {})
+      }
 
       excPc.onicecandidate = (e) => {
         if (e.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
@@ -306,6 +332,7 @@ export default function WatchPage() {
           exclusivePcRef.current = null
         }
         pointerAllowedRef.current = false
+        setInviteFromId(null)
         alert("El transmisor ha cerrado el canal exclusivo.")
         return
       }
@@ -319,6 +346,14 @@ export default function WatchPage() {
         setViewerCount(msg.count ?? 0)
         return
       }
+
+      // Banner "En Vivo Juntos"
+      if (msg.type === "exclusive-active" && msg.userName) {
+        setExclusiveActiveBanner(msg.userName)
+        setTimeout(() => setExclusiveActiveBanner(null), 5000)
+        return
+      }
+
     }
 
     ws.onerror = () => {
@@ -344,6 +379,11 @@ export default function WatchPage() {
       }
       if (exclusivePcRef.current) {
         exclusivePcRef.current.close()
+      }
+      if (exclusiveAudioRef.current) {
+        exclusiveAudioRef.current.pause()
+        exclusiveAudioRef.current.srcObject = null
+        exclusiveAudioRef.current = null
       }
     }
   }, [streamId, addMessage, registerWs, setActiveForum])
@@ -382,6 +422,17 @@ export default function WatchPage() {
             </p>
           </div>
         )}
+
+        {/* Banner "En Vivo Juntos" */}
+        {exclusiveActiveBanner && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+            <div className="flex items-center gap-2 px-4 py-2 bg-brand/90 backdrop-blur-sm text-white rounded-full shadow-lg shadow-brand/40 text-sm font-semibold">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              🎙 {exclusiveActiveBanner} está colaborando en vivo
+            </div>
+          </div>
+        )}
+
 
         {/* Modal UI para Invitación Exclusiva */}
         {inviteFromId && (
@@ -430,10 +481,33 @@ export default function WatchPage() {
         streamCategories={streamData?.categories}
       />
 
-      <div className="flex justify-start">
+      {/* Barra de acciones del espectador */}
+      <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 mt-2">
+        {/* Botón Levantar la Mano */}
+        <button
+          type="button"
+          onClick={() => {
+            if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !streamId) return
+            const next = !handRaised
+            setHandRaised(next)
+            wsRef.current.send(JSON.stringify({
+              type: next ? "raise-hand" : "lower-hand",
+              streamId,
+              userName: user?.name || "Espectador",
+            }))
+          }}
+          className={`px-4 py-2.5 sm:py-2 rounded-lg text-sm font-medium transition-all border text-center ${
+            handRaised
+              ? "bg-amber-500 text-white border-amber-400 shadow-lg shadow-amber-500/30"
+              : "bg-surface-panel text-copy border-border hover:bg-surface"
+          }`}
+        >
+          {handRaised ? "✋ Bajando la mano..." : "✋ Levantar la mano"}
+        </button>
+
         <Link
           to="/"
-          className="px-4 py-2 rounded-lg bg-surface-panel text-copy text-sm font-medium hover:bg-surface border border-border transition-colors w-fit"
+          className="px-4 py-2.5 sm:py-2 rounded-lg bg-surface-panel text-copy text-sm font-medium hover:bg-surface border border-border transition-colors text-center sm:ml-auto"
         >
           Volver al inicio
         </Link>

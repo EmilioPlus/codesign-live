@@ -33,6 +33,7 @@ export default function StreamPlayer() {
   const exclusiveAudioElRef = useRef<HTMLAudioElement | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const pendingExclusiveIceRef = useRef<RTCIceCandidateInit[]>([])
+  const exclusiveMicTempRef = useRef<MediaStream | null>(null)  // mic temporal cuando cámara está apagada
 
   const [isStreaming, setIsStreaming] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
@@ -53,6 +54,26 @@ export default function StreamPlayer() {
   const [forumResults, setForumResults] = useState<ForumResults | null>(null)
   const [forumResultsLoading, setForumResultsLoading] = useState(false)
   const [viewerCount, setViewerCount] = useState(0)
+
+  // Manos levantadas (cola de solicitudes)
+  type RaisedHand = { clientId: string; userName: string; timestamp: number }
+  const [raisedHands, setRaisedHands] = useState<RaisedHand[]>([])
+
+  // Reacciones flotantes
+  type FloatingReaction = { id: string; emoji: string; x: number }
+  const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([])
+
+  const addFloatingReaction = useCallback((emoji: string) => {
+    const id = Math.random().toString(36).slice(2)
+    const x = 10 + Math.random() * 80  // % from left
+    setFloatingReactions(prev => [...prev, { id, emoji, x }])
+    setTimeout(() => {
+      setFloatingReactions(prev => prev.filter(r => r.id !== id))
+    }, 2500)
+  }, [])
+
+  // Indicador "En Vivo Juntos"
+  const [exclusiveActiveName, setExclusiveActiveName] = useState<string | null>(null)
 
   // Asignar stream de pantalla al video cuando el elemento ya está en el DOM (isStreaming=true)
   useEffect(() => {
@@ -196,7 +217,7 @@ export default function StreamPlayer() {
         }
 
         excPc.ontrack = (event) => {
-          const remoteStream = event.streams[0]
+          const remoteStream = event.streams[0] || new MediaStream([event.track])
           if (!remoteStream) return
 
           // Reproducir para el transmisor localmente
@@ -205,15 +226,27 @@ export default function StreamPlayer() {
           audioEl.play().catch(() => {})
           exclusiveAudioElRef.current = audioEl
           
-          setExclusiveUser({ clientId: fromId, userName: "Invitado Exclusivo" })
+          const guestName = msg.userName || "Invitado Exclusivo"
+          setExclusiveUser({ clientId: fromId, userName: guestName })
+          setExclusiveActiveName(guestName)
 
-          // Web Audio API Mezcla (Mic local + remoto -> todos los viewers)
-          if (cameraStreamRef.current) {
+          // Quitar de la cola de manos levantadas
+          setRaisedHands(prev => prev.filter(h => h.clientId !== fromId))
+
+          // Notificar a todos los viewers que hay sesión exclusiva activa
+          sendSignal({
+            type: "exclusive-active",
+            streamId: streamIdRef.current,
+            userName: guestName,
+          })
+
+          // Web Audio API Mezcla (Mic local + remoto → todos los viewers)
+          const doMix = (localMicStream: MediaStream) => {
             const ctx = new AudioContext()
             audioCtxRef.current = ctx
             const dest = ctx.createMediaStreamDestination()
 
-            const localSource = ctx.createMediaStreamSource(cameraStreamRef.current)
+            const localSource = ctx.createMediaStreamSource(localMicStream)
             localSource.connect(dest)
 
             const remoteSource = ctx.createMediaStreamSource(remoteStream)
@@ -221,13 +254,42 @@ export default function StreamPlayer() {
 
             const mixedTrack = dest.stream.getAudioTracks()[0]
             
-            // Reemplazar la pista de audio a todos los espectadores de forma silenciosa
+            // Reemplazar la pista de audio a todos los espectadores
             peersRef.current.forEach((pc) => {
               const sender = pc.getSenders().find((s) => s.track && s.track.kind === "audio")
               if (sender && mixedTrack) {
                 sender.replaceTrack(mixedTrack).catch(() => {})
+              } else if (mixedTrack) {
+                // Si no había track de audio previo, agregar el mixeado
+                pc.addTrack(mixedTrack, dest.stream)
               }
             })
+          }
+
+          if (cameraStreamRef.current) {
+            doMix(cameraStreamRef.current)
+          } else {
+            // Si el broadcaster no tiene cámara, abrir mic temporal para mezcla
+            navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+              .then((tempMic) => {
+                exclusiveMicTempRef.current = tempMic
+                doMix(tempMic)
+              })
+              .catch(() => {
+                // Si falla, al menos enviar solo el audio remoto del invitado
+                const ctx = new AudioContext()
+                audioCtxRef.current = ctx
+                const dest = ctx.createMediaStreamDestination()
+                const remoteSource = ctx.createMediaStreamSource(remoteStream)
+                remoteSource.connect(dest)
+                const mixedTrack = dest.stream.getAudioTracks()[0]
+                peersRef.current.forEach((pc) => {
+                  const sender = pc.getSenders().find((s) => s.track && s.track.kind === "audio")
+                  if (sender && mixedTrack) {
+                    sender.replaceTrack(mixedTrack).catch(() => {})
+                  }
+                })
+              })
           }
         }
 
@@ -235,6 +297,26 @@ export default function StreamPlayer() {
         while (pendingExclusiveIceRef.current.length > 0) {
           const c = pendingExclusiveIceRef.current.shift()
           if (c) await excPc.addIceCandidate(new RTCIceCandidate(c))
+        }
+
+        // ✅ CRÍTICO: Agregar el audio del transmisor al exclusivePc ANTES del answer
+        // para que el espectador exclusivo pueda ESCUCHAR al transmisor
+        const localAudioStream = cameraStreamRef.current
+        if (localAudioStream) {
+          localAudioStream.getAudioTracks().forEach((track) => {
+            excPc.addTrack(track, localAudioStream)
+          })
+        } else {
+          // Si no tiene cámara encendida, abrir un mic temporal solo para este canal
+          try {
+            const tempMic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            exclusiveMicTempRef.current = tempMic
+            tempMic.getAudioTracks().forEach((track) => {
+              excPc.addTrack(track, tempMic)
+            })
+          } catch {
+            // No se pudo acceder al mic, el invitado no escuchará al broadcaster pero al menos puede hablar
+          }
         }
 
         const answer = await excPc.createAnswer()
@@ -329,8 +411,29 @@ export default function StreamPlayer() {
         }
         return
       }
+
+      // Mano levantada — agregar a la cola
+      if (msg.type === "raise-hand" && msg.fromId) {
+        setRaisedHands(prev => {
+          if (prev.find(h => h.clientId === msg.fromId)) return prev
+          return [...prev, { clientId: msg.fromId, userName: msg.userName || "Espectador", timestamp: Date.now() }]
+        })
+        return
+      }
+
+      // Mano bajada — quitar de la cola
+      if (msg.type === "lower-hand" && msg.fromId) {
+        setRaisedHands(prev => prev.filter(h => h.clientId !== msg.fromId))
+        return
+      }
+
+      // Reacción emoji
+      if (msg.type === "reaction" && msg.emoji) {
+        addFloatingReaction(msg.emoji)
+        return
+      }
     },
-    [createPeerForViewer, addMessage]
+    [createPeerForViewer, addMessage, addFloatingReaction]
   )
 
   const connectSignaling = useCallback(() => {
@@ -429,6 +532,10 @@ export default function StreamPlayer() {
     if (audioCtxRef.current) {
       audioCtxRef.current.close()
       audioCtxRef.current = null
+    }
+    if (exclusiveMicTempRef.current) {
+      exclusiveMicTempRef.current.getTracks().forEach(t => t.stop())
+      exclusiveMicTempRef.current = null
     }
     setExclusiveUser(null)
     setPointerAllowed(false)
@@ -558,6 +665,17 @@ export default function StreamPlayer() {
                 </span>
               </div>
             )}
+
+
+            {/* Banner "En Vivo Juntos" — solo visible 5s cuando empieza sesión exclusiva */}
+            {exclusiveActiveName && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+                <div className="flex items-center gap-2 px-4 py-2 bg-brand/90 backdrop-blur-sm text-white rounded-full shadow-lg shadow-brand/40 text-sm font-semibold animate-[fadeInDown_0.4s_ease-out]">
+                  <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                  🎙 {exclusiveActiveName} está colaborando en vivo
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -569,13 +687,13 @@ export default function StreamPlayer() {
       )}
 
       {/* Controles Transmisor */}
-      <div className="flex flex-wrap items-center gap-3 p-3 bg-surface-panel rounded-lg border border-border">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 p-3 bg-surface-panel rounded-lg border border-border">
         {!isStreaming ? (
           <button
             type="button"
             onClick={startStream}
             disabled={starting}
-            className="px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2.5 sm:py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors w-full sm:w-auto text-center"
           >
             {starting ? "Iniciando..." : "Iniciar transmisión de pantalla"}
           </button>
@@ -584,7 +702,7 @@ export default function StreamPlayer() {
             <button
               type="button"
               onClick={stopStream}
-              className="px-4 py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface hover:border-border border border-border transition-colors"
+              className="px-4 py-2.5 sm:py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface hover:border-border border border-border transition-colors w-full sm:w-auto text-center"
             >
               Detener transmisión
             </button>
@@ -592,7 +710,7 @@ export default function StreamPlayer() {
               <button
                 type="button"
                 onClick={startRecording}
-                className="px-4 py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface border border-border transition-colors"
+                className="px-4 py-2.5 sm:py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface border border-border transition-colors w-full sm:w-auto text-center"
               >
                 Grabar sesión
               </button>
@@ -600,7 +718,7 @@ export default function StreamPlayer() {
               <button
                 type="button"
                 onClick={stopRecording}
-                className="px-4 py-2 rounded-lg bg-danger text-white text-sm font-medium hover:bg-danger-hover transition-colors"
+                className="px-4 py-2.5 sm:py-2 rounded-lg bg-danger text-white text-sm font-medium hover:bg-danger-hover transition-colors w-full sm:w-auto text-center"
               >
                 Detener grabación
               </button>
@@ -608,12 +726,12 @@ export default function StreamPlayer() {
             
             {/* Panel de Usuario Exclusivo */}
             {exclusiveUser && (
-              <div className="flex items-center gap-3 px-3 py-1.5 bg-brand/10 border border-brand/30 rounded-lg ml-2">
+              <div className="flex flex-wrap items-center gap-3 px-3 py-2 sm:py-1.5 bg-brand/10 border border-brand/30 rounded-lg sm:ml-2 w-full sm:w-auto mt-2 sm:mt-0">
                 <span className="text-sm font-semibold text-brand animate-pulse">
                   🎙 {exclusiveUser.userName}
                 </span>
 
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-copy-muted hover:text-copy border-l border-brand/20 pl-3">
+                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-copy-muted hover:text-copy sm:border-l sm:border-brand/20 sm:pl-3">
                   <input
                     type="checkbox"
                     checked={pointerAllowed}
@@ -639,9 +757,26 @@ export default function StreamPlayer() {
                   type="button"
                   onClick={() => {
                     revokeExclusiveViewer()
-                    if (exclusivePcRef.current) exclusivePcRef.current.close()
-                    if (exclusiveAudioElRef.current) exclusiveAudioElRef.current.pause()
-                    if (audioCtxRef.current) audioCtxRef.current.close()
+                    try {
+                      if (exclusivePcRef.current) {
+                        exclusivePcRef.current.close()
+                        exclusivePcRef.current = null
+                      }
+                      if (exclusiveAudioElRef.current) {
+                        exclusiveAudioElRef.current.pause()
+                        exclusiveAudioElRef.current = null
+                      }
+                      if (audioCtxRef.current) {
+                        audioCtxRef.current.close().catch(() => {})
+                        audioCtxRef.current = null
+                      }
+                      if (exclusiveMicTempRef.current) {
+                        exclusiveMicTempRef.current.getTracks().forEach(t => t.stop())
+                        exclusiveMicTempRef.current = null
+                      }
+                    } catch (e) {
+                      console.error("Error al cerrar canal exclusivo", e)
+                    }
                     setExclusiveUser(null)
                     setPointerAllowed(false)
                     setPointerPos(null)
@@ -661,6 +796,40 @@ export default function StreamPlayer() {
                 </button>
               </div>
             )}
+
+            {/* Cola de Manos Levantadas */}
+            {isStreaming && raisedHands.length > 0 && !exclusiveUser && (
+              <div className="flex flex-col gap-1 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg ml-2 max-w-[220px]">
+                <p className="text-xs font-semibold text-amber-400 flex items-center gap-1">
+                  ✋ Manos levantadas ({raisedHands.length})
+                </p>
+                <div className="flex flex-col gap-1 max-h-28 overflow-y-auto">
+                  {raisedHands.map(hand => (
+                    <div key={hand.clientId} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-copy truncate">{hand.userName}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (wsRef.current?.readyState === WebSocket.OPEN && streamIdRef.current) {
+                            wsRef.current.send(JSON.stringify({
+                              type: "invite-exclusive",
+                              targetId: hand.clientId,
+                              streamId: streamIdRef.current,
+                              userName: user?.name || "Transmisor",
+                            }))
+                          }
+                        }}
+                        className="px-2 py-0.5 text-[10px] bg-brand text-white rounded hover:bg-brand-hover flex-shrink-0"
+                      >
+                        Invitar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+
             {isRecording && (
               <span className="text-sm text-copy-muted flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-danger animate-pulse" />
