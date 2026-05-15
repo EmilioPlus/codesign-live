@@ -666,6 +666,16 @@ export default function StreamPlayer() {
               </div>
             )}
 
+            {/* Renderizado de Reacciones Flotantes */}
+            {floatingReactions.map(r => (
+              <div
+                key={r.id}
+                className="absolute bottom-10 z-50 text-4xl pointer-events-none animate-bounce"
+                style={{ left: `${r.x}%` }}
+              >
+                {r.emoji}
+              </div>
+            ))}
 
             {/* Banner "En Vivo Juntos" — solo visible 5s cuando empieza sesión exclusiva */}
             {exclusiveActiveName && (
