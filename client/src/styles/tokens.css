@@ -1,0 +1,25 @@
+:root {
+
+  /* === BRAND === */
+  --color-primary: #2563EB;
+  --color-primary-hover: #1D4ED8;
+
+  /* === DANGER (stop, error) === */
+  --color-danger: #DC2626;
+  --color-danger-hover: #B91C1C;
+
+  /* === BACKGROUNDS === */
+  --color-bg-main: #0F172A;
+  --color-bg-panel: #1E293B;
+  --color-bg-muted: #334155;
+
+  /* === TEXT === */
+  --color-text-main: #E2E8F0;
+  --color-text-secondary: #94A3B8;
+
+  /* === BORDERS === */
+  --color-border: #334155;
+
+  /* === RADIUS === */
+  --radius-lg: 12px;
+}
