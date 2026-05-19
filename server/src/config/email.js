@@ -28,8 +28,14 @@ if (!EMAIL_USER || !EMAIL_PASSWORD) {
   console.warn("=".repeat(70) + "\n")
 } else {
   // Create Nodemailer transporter for Gmail
+  // NOTE: Use explicit host/port + family:4 to force IPv4.
+  // Render Free tier blocks outbound IPv6 (ENETUNREACH on port 465),
+  // so 'service: gmail' fails because it resolves to an IPv6 address.
   transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false, // TLS via STARTTLS on port 587
+    family: 4,     // Force IPv4 — required on Render Free tier
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_PASSWORD
