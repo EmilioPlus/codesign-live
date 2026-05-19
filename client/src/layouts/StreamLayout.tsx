@@ -77,59 +77,49 @@ export default function StreamLayout() {
         </div>
       </div>
 
-      {/* ── Móvil (<md): Una columna con 3 tabs ───────────────────────────── */}
-      <div className="md:hidden flex flex-col h-screen overflow-hidden bg-surface">
-        {/* Tab bar fijo abajo */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          {activeTab === "projects" && (
-            <div className="h-full overflow-hidden">
-              <SidebarProjects />
-            </div>
-          )}
-          {activeTab === "stream" && (
-            <main className="h-full overflow-y-auto p-3">
-              <ForumPanel />
-              <CreateForumPanel />
-              <Outlet />
-            </main>
-          )}
-          {activeTab === "chat" && (
-            <div className="h-full flex flex-col">
-              <ChatPanel />
-            </div>
-          )}
+      {/* ── Móvil (<md): Video arriba, Chat abajo ─────────────────────────── */}
+      <div className="md:hidden flex flex-col h-[100dvh] overflow-hidden bg-surface pb-safe">
+        {/* Sección superior: Video (StreamPlayer) */}
+        <div className="shrink-0 border-b border-border relative z-10 bg-surface shadow-sm max-h-[50vh] overflow-y-auto">
+          <Outlet />
+        </div>
+        
+        {/* Sección media: Foros (si hay) */}
+        <div className="shrink-0 bg-surface-panel z-0">
+          <ForumPanel />
+          <CreateForumPanel />
         </div>
 
-        {/* Barra de tabs en la parte inferior (estilo app móvil) */}
-        <nav className="shrink-0 grid grid-cols-3 border-t border-border bg-surface-panel safe-area-bottom">
-          <button
-            onClick={() => setActiveTab("projects")}
-            className={`flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-semibold transition-colors ${activeTab === "projects" ? "text-brand" : "text-copy-muted"}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
-            </svg>
-            Proyectos
-          </button>
-          <button
-            onClick={() => setActiveTab("stream")}
-            className={`flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-semibold transition-colors ${activeTab === "stream" ? "text-brand" : "text-copy-muted"}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-            </svg>
-            Transmisión
-          </button>
-          <button
-            onClick={() => setActiveTab("chat")}
-            className={`flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-semibold transition-colors ${activeTab === "chat" ? "text-brand" : "text-copy-muted"}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            Chat
-          </button>
-        </nav>
+        {/* Sección inferior: Chat */}
+        <div className="flex-1 min-h-0 flex flex-col z-0">
+          <ChatPanel />
+        </div>
+
+        {/* Botón flotante para Proyectos */}
+        <button
+          onClick={() => setActiveTab(activeTab === "projects" ? "stream" : "projects")}
+          className="absolute bottom-6 right-4 z-50 p-3.5 bg-brand text-white rounded-full shadow-xl shadow-brand/30 hover:scale-105 active:scale-95 transition-all"
+          aria-label="Proyectos"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" />
+          </svg>
+        </button>
+
+        {/* Drawer de proyectos (pantalla completa sobrepuesta) */}
+        {activeTab === "projects" && (
+          <div className="absolute inset-0 z-50 bg-surface flex flex-col animate-[fadeIn_0.2s_ease-out]">
+            <div className="p-4 border-b border-border flex justify-between items-center bg-surface-panel shadow-sm">
+              <h2 className="font-bold text-lg text-copy">Proyectos y Archivos</h2>
+              <button onClick={() => setActiveTab("stream")} className="p-2 text-copy-muted hover:text-copy hover:bg-surface-muted rounded-full transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <SidebarProjects />
+            </div>
+          </div>
+        )}
       </div>
 
     </StreamRoomProvider>

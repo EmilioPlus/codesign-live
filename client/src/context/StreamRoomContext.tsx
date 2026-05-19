@@ -44,6 +44,11 @@ export type ExclusiveUser = {
   userName: string
 }
 
+export type CanvasStroke = {
+  id: string
+  points: { x: number; y: number }[]
+}
+
 type StreamRoomContextValue = {
   streamId: string | null
   setBroadcasterStreamId: (id: string | null) => void
@@ -64,6 +69,12 @@ type StreamRoomContextValue = {
   setExclusiveUser: (user: ExclusiveUser | null) => void
   inviteExclusiveViewer: (clientId: string, userName: string) => void
   revokeExclusiveViewer: (clientId?: string) => void
+  strokes: CanvasStroke[]
+  addStroke: (stroke: CanvasStroke) => void
+  clearStrokes: () => void
+  setStrokes: (strokes: CanvasStroke[]) => void
+  sendDrawStroke: (stroke: CanvasStroke) => void
+  sendClearCanvas: () => void
 }
 
 const StreamRoomContext = createContext<StreamRoomContextValue | null>(null)
@@ -81,6 +92,7 @@ export function StreamRoomProvider({
   const [isCreatingForum, setIsCreatingForum] = useState(false)
   const [activeProject, setActiveProject] = useState<ProjectFile | null>(null)
   const [exclusiveUser, setExclusiveUser] = useState<ExclusiveUser | null>(null)
+  const [strokes, setStrokes] = useState<CanvasStroke[]>([])
   const wsRef = useRef<WebSocket | null>(null)
 
   const streamId = streamIdFromParams ?? broadcasterStreamId
@@ -156,6 +168,28 @@ export function StreamRoomProvider({
     }
   }, [streamId, exclusiveUser])
 
+  const addStroke = useCallback((stroke: CanvasStroke) => {
+    setStrokes((prev) => [...prev, stroke])
+  }, [])
+
+  const clearStrokes = useCallback(() => {
+    setStrokes([])
+  }, [])
+
+  const sendDrawStroke = useCallback((stroke: CanvasStroke) => {
+    if (!streamId) return
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    ws.send(JSON.stringify({ type: "draw-stroke", streamId, stroke }))
+  }, [streamId])
+
+  const sendClearCanvas = useCallback(() => {
+    if (!streamId) return
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    ws.send(JSON.stringify({ type: "clear-canvas", streamId }))
+  }, [streamId])
+
   const value: StreamRoomContextValue = {
     streamId,
     setBroadcasterStreamId,
@@ -176,6 +210,12 @@ export function StreamRoomProvider({
     setExclusiveUser,
     inviteExclusiveViewer,
     revokeExclusiveViewer,
+    strokes,
+    addStroke,
+    clearStrokes,
+    setStrokes,
+    sendDrawStroke,
+    sendClearCanvas,
   }
 
   return (
