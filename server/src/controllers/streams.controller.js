@@ -25,6 +25,10 @@ export const createStream = async (req, res, next) => {
 
     if (!existingLive.empty) {
       const existing = existingLive.docs[0]
+      
+      // Reiniciar el contador de espectadores a 0 en la base de datos para la nueva sesión
+      await existing.ref.update({ viewerCount: 0 })
+
       const data = existing.data()
       const stream = {
         id: existing.id,
@@ -35,7 +39,7 @@ export const createStream = async (req, res, next) => {
         description: data.description || "",
         thumbnailUrl: data.thumbnailUrl || null,
         status: data.status,
-        viewerCount: data.viewerCount ?? 0,
+        viewerCount: 0,
         createdAt: data.createdAt,
       }
       return res.status(200).json({ stream })
