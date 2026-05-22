@@ -12,7 +12,7 @@ import AdminRoutes from "./routes/admin.routes.js"
 import StreamerRoutes from "./routes/streamer.routes.js"
 import { errorHandler } from "./middlewares/middleware.error.js"
 import { notFound } from "./middlewares/middleware.notFound.js"
-import transporter from "./config/email.js"
+import resend from "./config/email.js"
 import path from "path"
 import { fileURLToPath } from "url"
 
@@ -71,32 +71,20 @@ app.use("/api/streamer", StreamerRoutes)
 
 // ── Email health check (diagnóstico en producción) ────────────────────────
 app.get("/api/health/email", async (req, res) => {
-  const emailUser = process.env.EMAIL_USER
-  const emailPass = process.env.EMAIL_PASSWORD
+  const resendKey = process.env.RESEND_API_KEY
   const clientUrl = process.env.CLIENT_URL
   const frontendUrl = process.env.FRONTEND_URL
 
   const status = {
-    emailConfigured: !!(emailUser && emailPass),
-    emailUser: emailUser ? `${emailUser.slice(0, 4)}...@${emailUser.split("@")[1]}` : null,
-    passwordLength: emailPass ? emailPass.length : 0,
-    transporterReady: transporter !== null,
+    provider: "Resend",
+    emailConfigured: !!resendKey,
+    apiKeyPrefix: resendKey ? `${resendKey.slice(0, 6)}...` : null,
+    clientReady: resend !== null,
     clientUrl: clientUrl || null,
     frontendUrl: frontendUrl || null,
-    smtpVerified: false,
-    smtpError: null,
   }
 
-  if (transporter) {
-    try {
-      await transporter.verify()
-      status.smtpVerified = true
-    } catch (err) {
-      status.smtpError = err.message
-    }
-  }
-
-  const ok = status.emailConfigured && status.transporterReady && status.smtpVerified
+  const ok = status.emailConfigured && status.clientReady
   res.status(ok ? 200 : 503).json({ ok, ...status })
 })
 
