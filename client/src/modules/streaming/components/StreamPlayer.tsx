@@ -17,7 +17,7 @@ import StreamerProfilePanel from "./StreamerProfilePanel"
 
 export default function StreamPlayer() {
   const { user } = useAuth()
-  const { setBroadcasterStreamId, addMessage, registerWs, activeForum, setActiveForum, setIsCreatingForum, exclusiveUser, setExclusiveUser, revokeExclusiveViewer, addStroke, clearStrokes } = useStreamRoom()
+  const { setBroadcasterStreamId, addMessage, registerWs, activeForum, setActiveForum, setIsCreatingForum, exclusiveUser, setExclusiveUser, revokeExclusiveViewer, addStroke, clearStrokes, setViewerCount } = useStreamRoom()
   const screenVideoRef = useRef<HTMLVideoElement>(null)
   const cameraVideoRef = useRef<HTMLVideoElement>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
@@ -54,7 +54,6 @@ export default function StreamPlayer() {
   const [uploadingThumb, setUploadingThumb] = useState(false)
   const [forumResults, setForumResults] = useState<ForumResults | null>(null)
   const [forumResultsLoading, setForumResultsLoading] = useState(false)
-  const [viewerCount, setViewerCount] = useState(0)
 
   // Manos levantadas (cola de solicitudes)
   type RaisedHand = { clientId: string; userName: string; timestamp: number }
@@ -876,13 +875,6 @@ export default function StreamPlayer() {
             )}
 
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium text-brand px-3 py-1.5 bg-brand/10 border border-brand/20 rounded-lg flex items-center gap-1.5" title="Espectadores en vivo">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                  <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-                {viewerCount}
-              </span>
               <button
                 type="button"
                 onClick={async () => {
@@ -1063,7 +1055,6 @@ export default function StreamPlayer() {
           streamerName={user.name}
           streamerAvatarUrl={user.avatarUrl}
           isBroadcaster={true}
-          viewerCount={viewerCount}
           // Pasamos el panel mute function solo para que coincida con props
           isMuted={micMuted} 
           onToggleMute={toggleMic}

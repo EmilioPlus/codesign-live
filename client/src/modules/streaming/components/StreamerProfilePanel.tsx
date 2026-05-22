@@ -16,7 +16,6 @@ interface StreamerProfilePanelProps {
   streamerName: string
   streamerAvatarUrl?: string | null
   isBroadcaster?: boolean         // Si el viewer actual ES el transmisor
-  viewerCount: number
   isMuted?: boolean
   onToggleMute?: () => void
   streamTitle?: string            // Título del stream (efímero, via WS)
@@ -64,7 +63,6 @@ export default function StreamerProfilePanel({
   streamerName,
   streamerAvatarUrl,
   isBroadcaster = false,
-  viewerCount,
   isMuted,
   onToggleMute,
   streamTitle,
@@ -258,12 +256,6 @@ export default function StreamerProfilePanel({
           <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto mt-2 sm:mt-0">
             {/* Stats row */}
             <div className="flex items-center gap-3 text-sm font-semibold text-copy">
-              <div className="flex items-center gap-1.5 text-red-500">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-                </svg>
-                <span>{viewerCount > 0 ? viewerCount.toLocaleString() : "0"}</span>
-              </div>
               <span className="text-copy-muted">{uptime}</span>
               {/* Botón de Mute si aplica */}
               {onToggleMute && (
