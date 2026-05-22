@@ -17,7 +17,7 @@ import StreamerProfilePanel from "./StreamerProfilePanel"
 
 export default function StreamPlayer() {
   const { user } = useAuth()
-  const { setBroadcasterStreamId, addMessage, registerWs, activeForum, setActiveForum, setIsCreatingForum, exclusiveUser, setExclusiveUser, revokeExclusiveViewer, addStroke, clearStrokes, viewerCount, setViewerCount } = useStreamRoom()
+  const { setBroadcasterStreamId, addMessage, registerWs, activeForum, setActiveForum, setIsCreatingForum, exclusiveUser, setExclusiveUser, revokeExclusiveViewer, addStroke, clearStrokes, setViewerCount } = useStreamRoom()
   const screenVideoRef = useRef<HTMLVideoElement>(null)
   const cameraVideoRef = useRef<HTMLVideoElement>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
@@ -1055,7 +1055,6 @@ export default function StreamPlayer() {
           streamerName={user.name}
           streamerAvatarUrl={user.avatarUrl}
           isBroadcaster={true}
-          viewerCount={viewerCount}
           // Pasamos el panel mute function solo para que coincida con props
           isMuted={micMuted} 
           onToggleMute={toggleMic}

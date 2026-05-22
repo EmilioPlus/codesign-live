@@ -13,7 +13,7 @@ const rtcConfig: RTCConfiguration = {
 export default function WatchPage() {
   const { streamId } = useParams()
   const { user } = useAuth()
-  const { addMessage, registerWs, setActiveForum, addStroke, clearStrokes, viewerCount, setViewerCount } = useStreamRoom()
+  const { addMessage, registerWs, setActiveForum, addStroke, clearStrokes, setViewerCount } = useStreamRoom()
   const mainVideoRef = useRef<HTMLVideoElement>(null)
   const overlayVideoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -485,7 +485,6 @@ export default function WatchPage() {
         streamerName={streamData?.userName || ""}
         streamerAvatarUrl={streamData?.userAvatarUrl}
         isBroadcaster={false}
-        viewerCount={viewerCount}
         isMuted={isMuted}
         onToggleMute={() => setIsMuted(m => !m)}
         streamTitle={streamTitle || streamData?.title}

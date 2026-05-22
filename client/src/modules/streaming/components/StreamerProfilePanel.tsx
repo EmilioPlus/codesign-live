@@ -16,7 +16,6 @@ interface StreamerProfilePanelProps {
   streamerName: string
   streamerAvatarUrl?: string | null
   isBroadcaster?: boolean         // Si el viewer actual ES el transmisor
-  viewerCount: number
   isMuted?: boolean
   onToggleMute?: () => void
   streamTitle?: string            // Título del stream (efímero, via WS)
@@ -64,7 +63,6 @@ export default function StreamerProfilePanel({
   streamerName,
   streamerAvatarUrl,
   isBroadcaster = false,
-  viewerCount,
   isMuted,
   onToggleMute,
   streamTitle,
