@@ -75,6 +75,8 @@ type StreamRoomContextValue = {
   setStrokes: (strokes: CanvasStroke[]) => void
   sendDrawStroke: (stroke: CanvasStroke) => void
   sendClearCanvas: () => void
+  viewerCount: number
+  setViewerCount: (count: number) => void
 }
 
 const StreamRoomContext = createContext<StreamRoomContextValue | null>(null)
@@ -176,6 +178,8 @@ export function StreamRoomProvider({
     setStrokes([])
   }, [])
 
+  const [viewerCount, setViewerCount] = useState(0)
+
   const sendDrawStroke = useCallback((stroke: CanvasStroke) => {
     if (!streamId) return
     const ws = wsRef.current
@@ -216,6 +220,8 @@ export function StreamRoomProvider({
     setStrokes,
     sendDrawStroke,
     sendClearCanvas,
+    viewerCount,
+    setViewerCount,
   }
 
   return (

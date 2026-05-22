@@ -7,7 +7,7 @@ import { uploadFileApi, createProjectApi, getUserProjectsApi, getStreamsApi, del
 export default function SidebarProjects() {
   const { user } = useAuth()
   const { streamId } = useParams() 
-  const { setActiveProject, activeProject } = useStreamRoom()
+  const { setActiveProject, activeProject, viewerCount, streamId: contextStreamId } = useStreamRoom()
   
   const [projects, setProjects] = useState<ProjectFile[]>([])
   const [broadcasterId, setBroadcasterId] = useState<string | null>(null)
@@ -86,10 +86,19 @@ export default function SidebarProjects() {
   return (
     <div className="flex flex-col h-full bg-surface-panel overflow-hidden border-r border-border">
       <div className="p-4 border-b border-border flex flex-col gap-3">
-        <div className="flex justify-between items-center">
-          <span className="text-lg font-bold text-brand truncate">
+        <div className="flex justify-between items-center gap-2">
+          <Link to="/" className="text-lg font-bold text-brand block truncate">
             CoDesign LIVE
-          </span>
+          </Link>
+          {contextStreamId && (
+            <span className="text-xs font-semibold text-brand px-2.5 py-1 bg-brand/10 border border-brand/20 rounded-full flex items-center gap-1 shrink-0 shadow-sm animate-pulse" title="Espectadores en vivo">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-80">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              {viewerCount}
+            </span>
+          )}
         </div>
         <Link 
           to="/" 
