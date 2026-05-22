@@ -232,6 +232,21 @@ wss.on("connection", (ws) => {
       }
       return
     }
+    if ((msg.type === "draw-stroke" || msg.type === "clear-canvas") && msg.streamId) {
+      if (client.streamId !== msg.streamId) return
+      const streamInfo = streams.get(msg.streamId)
+      if (!streamInfo) return
+      const payload = JSON.stringify(msg)
+      streamInfo.viewers.forEach((viewerId) => {
+        const viewer = clients.get(viewerId)
+        if (viewer && viewerId !== clientId) viewer.ws.send(payload)
+      })
+      if (streamInfo.broadcasterId && streamInfo.broadcasterId !== clientId) {
+        const broadcaster = clients.get(streamInfo.broadcasterId)
+        if (broadcaster) broadcaster.ws.send(payload)
+      }
+      return
+    }
   })
 
   ws.on("close", () => {

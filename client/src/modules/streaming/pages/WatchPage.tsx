@@ -13,7 +13,7 @@ const rtcConfig: RTCConfiguration = {
 export default function WatchPage() {
   const { streamId } = useParams()
   const { user } = useAuth()
-  const { addMessage, registerWs, setActiveForum } = useStreamRoom()
+  const { addMessage, registerWs, setActiveForum, addStroke, clearStrokes } = useStreamRoom()
   const mainVideoRef = useRef<HTMLVideoElement>(null)
   const overlayVideoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -26,6 +26,7 @@ export default function WatchPage() {
   const exclusivePcRef = useRef<RTCPeerConnection | null>(null)
   const exclusiveMicRef = useRef<MediaStream | null>(null)
   const pendingExclusiveIceRef = useRef<RTCIceCandidateInit[]>([])
+  const [pointerAllowed, setPointerAllowed] = useState(false)
   const pointerAllowedRef = useRef(false)
   const lastPointerSentRef = useRef<number>(0)
   const [error, setError] = useState<string | null>(null)
@@ -215,6 +216,16 @@ export default function WatchPage() {
         return
       }
 
+      if (msg.type === "draw-stroke") {
+        addStroke(msg.stroke)
+        return
+      }
+
+      if (msg.type === "clear-canvas") {
+        clearStrokes()
+        return
+      }
+
       if (msg.type === "chat-message") {
         addMessage({
           text: msg.text,
@@ -339,6 +350,7 @@ export default function WatchPage() {
 
       if (msg.type === "pointer-permission") {
         pointerAllowedRef.current = msg.allowed
+        setPointerAllowed(msg.allowed)
         return
       }
 
@@ -393,10 +405,10 @@ export default function WatchPage() {
 
       {/* Contenedor del video se ajusta al contenido para evitar espacios negros (letterboxing) forzados */}
       <div 
-        className={`w-full bg-black flex justify-center items-center rounded-xl overflow-hidden relative shadow-[0_4px_30px_rgba(0,0,0,0.3)] ${pointerAllowedRef.current ? 'cursor-crosshair' : ''}`}
+        className={`w-full bg-black flex justify-center items-center rounded-xl overflow-hidden relative shadow-[0_4px_30px_rgba(0,0,0,0.3)] ${pointerAllowed ? 'cursor-crosshair' : ''}`}
         onMouseMove={handleMouseMove}
       >
-        <ProjectViewerOverlay />
+        <ProjectViewerOverlay canDraw={pointerAllowed} isBroadcaster={false} />
         <video
           ref={mainVideoRef}
           autoPlay

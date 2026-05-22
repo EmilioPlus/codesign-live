@@ -45,7 +45,7 @@ export default function ChatPanel() {
 
   if (!room) {
     return (
-      <div className="flex-1 min-h-0 h-full flex flex-col bg-surface-panel p-4">
+      <div className="flex-1 min-h-0 h-full flex flex-col bg-surface-panel p-2 sm:p-4">
         <h3 className="font-semibold text-copy">Chat en Tiempo Real</h3>
         <p className="text-copy-muted text-sm mt-2">Cargando...</p>
       </div>
@@ -107,7 +107,7 @@ export default function ChatPanel() {
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col bg-surface-panel">
       {/* Header del chat */}
-      <div className="p-4 border-b border-border flex items-center justify-between">
+      <div className="p-2 sm:p-4 border-b border-border flex items-center justify-between">
         <h3 className="font-semibold text-copy">Chat en Tiempo Real</h3>
         {/* Puntuación acumulada del streamer */}
         {streamId && totalScore() > 0 && (
@@ -122,7 +122,7 @@ export default function ChatPanel() {
       </div>
 
       {!streamId ? (
-        <div className="flex-1 p-4 flex items-center justify-center">
+        <div className="flex-1 p-2 sm:p-4 flex items-center justify-center">
           <p className="text-copy-muted text-sm text-center">
             Inicia una transmisión o únete a una para ver y escribir en el chat.
           </p>
@@ -130,7 +130,7 @@ export default function ChatPanel() {
       ) : (
         <>
           {/* Lista de mensajes */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
+          <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-2 min-h-0">
             {messages.length === 0 && (
               <p className="text-copy-muted text-sm">Sin mensajes aún. ¡Sé el primero en saludar!</p>
             )}
@@ -159,7 +159,7 @@ export default function ChatPanel() {
               return (
                 <div
                   key={msg.id}
-                  className={`p-3 rounded-lg relative group ${isExclusive ? "bg-brand/10 border border-brand/30" : "bg-surface-muted"}`}
+                  className={`p-2 sm:p-3 rounded-lg relative group ${isExclusive ? "bg-brand/10 border border-brand/30" : "bg-surface-muted"}`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <p className={`text-xs font-medium ${isExclusive && isBroadcasterView ? "text-brand animate-pulse" : "text-copy-muted"}`}>
@@ -191,7 +191,7 @@ export default function ChatPanel() {
               const counts = reactionCounts()
               const active = EMOJIS.filter(e => counts[e.emoji] > 0)
               return active.length > 0 ? (
-                <div className="px-4 pt-2 pb-1 flex items-center gap-1.5 flex-wrap">
+                <div className="px-2 sm:px-4 pt-2 pb-1 flex items-center gap-1.5 flex-wrap">
                   <span className="text-[10px] text-copy-muted font-medium uppercase tracking-wide mr-1">Reacciones:</span>
                   {active.map(({ emoji, label, value }) => (
                     <div
@@ -208,7 +208,7 @@ export default function ChatPanel() {
             })()}
 
             {/* Botones de envío + cooldown */}
-            <div className="px-3 pt-1 pb-2">
+            <div className="px-2 sm:px-3 pt-1 pb-2">
               {cooldownLeft > 0 && (
                 <div className="mb-1.5 flex items-center gap-2">
                   <div className="flex-1 h-1 rounded-full bg-surface-muted overflow-hidden">
@@ -231,7 +231,7 @@ export default function ChatPanel() {
                     title={`${label} · +${value} pt${value > 1 ? "s" : ""}`}
                     onClick={() => sendReaction(emoji)}
                     disabled={cooldownLeft > 0}
-                    className={`group relative text-xl p-1.5 rounded-lg transition-all
+                    className={`group relative text-lg sm:text-xl p-1 sm:p-1.5 rounded-lg transition-all
                       ${cooldownLeft > 0
                         ? "opacity-40 cursor-not-allowed grayscale"
                         : "hover:scale-125 active:scale-95 hover:bg-surface-muted cursor-pointer"
@@ -250,7 +250,7 @@ export default function ChatPanel() {
           </div>
 
           {/* Input del chat */}
-          <div className="px-4 pb-4 pt-2 bg-surface-panel">
+          <div className="px-2 pb-2 sm:px-4 sm:pb-4 pt-2 bg-surface-panel">
             <form onSubmit={handleSubmit} className="flex gap-2">
               <input
                 type="text"

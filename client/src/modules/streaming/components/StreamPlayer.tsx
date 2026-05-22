@@ -16,7 +16,7 @@ import StreamerProfilePanel from "./StreamerProfilePanel"
 
 export default function StreamPlayer() {
   const { user } = useAuth()
-  const { setBroadcasterStreamId, addMessage, registerWs, activeForum, setActiveForum, setIsCreatingForum, exclusiveUser, setExclusiveUser, revokeExclusiveViewer } = useStreamRoom()
+  const { setBroadcasterStreamId, addMessage, registerWs, activeForum, setActiveForum, setIsCreatingForum, exclusiveUser, setExclusiveUser, revokeExclusiveViewer, addStroke, clearStrokes } = useStreamRoom()
   const screenVideoRef = useRef<HTMLVideoElement>(null)
   const cameraVideoRef = useRef<HTMLVideoElement>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
@@ -348,6 +348,16 @@ export default function StreamPlayer() {
         return
       }
 
+      if (msg.type === "draw-stroke") {
+        addStroke(msg.stroke)
+        return
+      }
+
+      if (msg.type === "clear-canvas") {
+        clearStrokes()
+        return
+      }
+
       if (msg.type === "chat-message") {
         addMessage({
           text: msg.text,
@@ -619,8 +629,8 @@ export default function StreamPlayer() {
   return (
     <div className="w-full h-full flex flex-col gap-4">
       {/* Área de video (Preview / Canvas) */}
-      <div className="flex-1 min-h-[400px] flex items-center justify-center bg-surface-muted rounded-lg overflow-hidden relative">
-        <ProjectViewerOverlay />
+      <div className="shrink-0 sm:flex-1 w-full aspect-video sm:aspect-auto min-h-[250px] sm:min-h-[400px] flex items-center justify-center bg-surface-muted rounded-none sm:rounded-lg overflow-hidden relative">
+        <ProjectViewerOverlay canDraw={true} isBroadcaster={true} />
         {!isStreaming ? (
           <div className="flex flex-col items-center justify-center gap-3 text-center p-6">
             <p className="text-copy-muted">
@@ -645,7 +655,7 @@ export default function StreamPlayer() {
                 autoPlay
                 playsInline
                 muted
-                className="absolute bottom-4 right-4 w-48 h-32 rounded-lg border border-border bg-black object-cover shadow-lg"
+                className="absolute bottom-4 right-4 w-24 h-16 sm:w-48 sm:h-32 rounded-lg border border-border bg-black object-cover shadow-lg"
               />
             )}
             
@@ -697,13 +707,13 @@ export default function StreamPlayer() {
       )}
 
       {/* Controles Transmisor */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 p-3 bg-surface-panel rounded-lg border border-border">
+      <div className="flex flex-row overflow-x-auto sm:flex-wrap items-center gap-3 p-3 bg-surface-panel sm:rounded-lg border-y sm:border border-border shrink-0">
         {!isStreaming ? (
           <button
             type="button"
             onClick={startStream}
             disabled={starting}
-            className="px-4 py-2.5 sm:py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors w-full sm:w-auto text-center"
+            className="px-4 py-2.5 sm:py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors shrink-0 whitespace-nowrap text-center"
           >
             {starting ? "Iniciando..." : "Iniciar transmisión de pantalla"}
           </button>
@@ -712,7 +722,7 @@ export default function StreamPlayer() {
             <button
               type="button"
               onClick={stopStream}
-              className="px-4 py-2.5 sm:py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface hover:border-border border border-border transition-colors w-full sm:w-auto text-center"
+              className="px-4 py-2.5 sm:py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface hover:border-border border border-border transition-colors shrink-0 whitespace-nowrap text-center"
             >
               Detener transmisión
             </button>
@@ -720,7 +730,7 @@ export default function StreamPlayer() {
               <button
                 type="button"
                 onClick={startRecording}
-                className="px-4 py-2.5 sm:py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface border border-border transition-colors w-full sm:w-auto text-center"
+                className="px-4 py-2.5 sm:py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface border border-border transition-colors shrink-0 whitespace-nowrap text-center"
               >
                 Grabar sesión
               </button>
@@ -728,7 +738,7 @@ export default function StreamPlayer() {
               <button
                 type="button"
                 onClick={stopRecording}
-                className="px-4 py-2.5 sm:py-2 rounded-lg bg-danger text-white text-sm font-medium hover:bg-danger-hover transition-colors w-full sm:w-auto text-center"
+                className="px-4 py-2.5 sm:py-2 rounded-lg bg-danger text-white text-sm font-medium hover:bg-danger-hover transition-colors shrink-0 whitespace-nowrap text-center"
               >
                 Detener grabación
               </button>
@@ -736,7 +746,7 @@ export default function StreamPlayer() {
             
             {/* Panel de Usuario Exclusivo */}
             {exclusiveUser && (
-              <div className="flex flex-wrap items-center gap-3 px-3 py-2 sm:py-1.5 bg-brand/10 border border-brand/30 rounded-lg sm:ml-2 w-full sm:w-auto mt-2 sm:mt-0">
+              <div className="flex items-center shrink-0 whitespace-nowrap gap-3 px-3 py-2 sm:py-1.5 bg-brand/10 border border-brand/30 rounded-lg sm:ml-2">
                 <span className="text-sm font-semibold text-brand animate-pulse">
                   🎙 {exclusiveUser.userName}
                 </span>

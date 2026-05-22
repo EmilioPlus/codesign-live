@@ -9,8 +9,8 @@ export default function MainLayout() {
   const closeMenu = () => setMenuOpen(false)
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface">
-      <header className="sticky top-0 z-30 flex items-center justify-between h-14 px-4 border-b border-border bg-surface-panel">
+    <div className="min-h-[100dvh] flex flex-col bg-surface">
+      <header className="sticky top-0 z-50 flex items-center justify-between h-14 px-4 border-b border-border bg-surface-panel">
         {/* Logo */}
         <Link to="/" className="text-lg font-semibold text-brand shrink-0" onClick={closeMenu}>
           CoDesign LIVE
@@ -87,7 +87,7 @@ export default function MainLayout() {
 
       {/* Mobile drawer */}
       {menuOpen && (
-        <div className="sm:hidden fixed inset-0 z-20 bg-black/50" onClick={closeMenu}>
+        <div className="sm:hidden fixed inset-0 z-40 bg-black/50" onClick={closeMenu}>
           <nav
             className="absolute top-14 right-0 left-0 bg-surface-panel border-b border-border p-4 flex flex-col gap-2 shadow-xl"
             onClick={e => e.stopPropagation()}
