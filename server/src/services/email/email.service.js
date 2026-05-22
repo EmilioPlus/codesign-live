@@ -1,19 +1,23 @@
-import transporter, { isEmailEnabled } from "../../config/email.js"
+import resend, { isEmailEnabled } from "../../config/email.js"
 
 const FRONTEND_URL = process.env.CLIENT_URL || "http://localhost:5173"
 const APP_NAME = "CoDesign LIVE"
+const FROM_ADDRESS = process.env.EMAIL_FROM || "CoDesign LIVE <noreply@codesign-live.com>"
 
+// ---------------------------------------------------------------------------
+// sendPasswordResetEmail
+// ---------------------------------------------------------------------------
 export const sendPasswordResetEmail = async (email, resetToken, userId) => {
   try {
-    if (!transporter) {
+    if (!resend) {
       console.warn(`[Email] Email service not configured, skipping password reset email for ${email}`)
       return false
     }
 
     const resetLink = `${FRONTEND_URL}/auth/reset/${userId}/${resetToken}`
 
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+    const { data, error } = await resend.emails.send({
+      from: FROM_ADDRESS,
       to: email,
       subject: `${APP_NAME} - Restablecer Contraseña`,
       html: `
@@ -37,7 +41,6 @@ export const sendPasswordResetEmail = async (email, resetToken, userId) => {
               margin: 20px 0;
               font-weight: bold;
             }
-            .reset-button:hover { background-color: #1d4ed8; }
             .warning {
               background-color: #fffbea;
               border-left: 4px solid #f59e0b;
@@ -63,7 +66,6 @@ export const sendPasswordResetEmail = async (email, resetToken, userId) => {
 
             <div class="content">
               <p>¡Hola!</p>
-
               <p>Recibimos una solicitud para restablecer tu contraseña. Si fuiste tú, usa el botón de abajo para crear una nueva contraseña.</p>
 
               <center>
@@ -96,10 +98,14 @@ export const sendPasswordResetEmail = async (email, resetToken, userId) => {
         </body>
         </html>
       `
+    })
+
+    if (error) {
+      console.error(`[Email Error] Resend rejected reset email to ${email}:`, error)
+      throw new Error(error.message)
     }
 
-    const info = await transporter.sendMail(mailOptions)
-    console.log(`[Email] Password reset sent to ${email} (Message ID: ${info.messageId.split("@")[0]}...)`)
+    console.log(`[Email] Password reset sent to ${email} (Resend ID: ${data.id})`)
     return true
   } catch (error) {
     console.error(`[Email Error] Failed to send reset email to ${email}:`, error.message)
@@ -107,15 +113,18 @@ export const sendPasswordResetEmail = async (email, resetToken, userId) => {
   }
 }
 
+// ---------------------------------------------------------------------------
+// sendPasswordResetConfirmationEmail
+// ---------------------------------------------------------------------------
 export const sendPasswordResetConfirmationEmail = async (email, userName) => {
   try {
-    if (!transporter) {
+    if (!resend) {
       console.warn(`[Email] Email service not configured, skipping confirmation email for ${email}`)
       return false
     }
 
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+    const { data, error } = await resend.emails.send({
+      from: FROM_ADDRESS,
       to: email,
       subject: `${APP_NAME} - Contraseña Actualizada`,
       html: `
@@ -173,10 +182,14 @@ export const sendPasswordResetConfirmationEmail = async (email, userName) => {
         </body>
         </html>
       `
+    })
+
+    if (error) {
+      console.warn(`[Email] Resend rejected confirmation email to ${email}:`, error)
+      return false
     }
 
-    await transporter.sendMail(mailOptions)
-    console.log(`[Email] Password confirmation email sent to ${email}`)
+    console.log(`[Email] Password confirmation email sent to ${email} (Resend ID: ${data.id})`)
     return true
   } catch (error) {
     console.error(`[Email Error] Failed to send confirmation email to ${email}:`, error.message)
@@ -185,17 +198,20 @@ export const sendPasswordResetConfirmationEmail = async (email, userName) => {
   }
 }
 
+// ---------------------------------------------------------------------------
+// sendVerificationEmail
+// ---------------------------------------------------------------------------
 export const sendVerificationEmail = async (email, verificationToken, userId, userName) => {
   try {
-    if (!transporter) {
+    if (!resend) {
       console.warn(`[Email] Email service not configured, skipping verification email for ${email}`)
       return false
     }
 
     const verificationLink = `${FRONTEND_URL}/auth/verify/${userId}/${verificationToken}`
 
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+    const { data, error } = await resend.emails.send({
+      from: FROM_ADDRESS,
       to: email,
       subject: `${APP_NAME} - Verifica tu correo electrónico`,
       html: `
@@ -219,7 +235,6 @@ export const sendVerificationEmail = async (email, verificationToken, userId, us
               margin: 20px 0;
               font-weight: bold;
             }
-            .verify-button:hover { background-color: #1d4ed8; }
             .footer {
               border-top: 1px solid #e5e5e5;
               margin-top: 20px;
@@ -239,7 +254,7 @@ export const sendVerificationEmail = async (email, verificationToken, userId, us
             <div class="content">
               <p>¡Hola ${userName}!</p>
               <p>Gracias por registrarte en ${APP_NAME}. Para activar tu cuenta y poder ingresar, debes verificar tu dirección de correo electrónico.</p>
-              
+
               <center>
                 <a href="${verificationLink}" class="verify-button" style="color: #ffffff !important; text-decoration: none;">Verificar mi correo</a>
               </center>
@@ -259,14 +274,17 @@ export const sendVerificationEmail = async (email, verificationToken, userId, us
         </body>
         </html>
       `
+    })
+
+    if (error) {
+      console.error(`[Email Error] Resend rejected verification email to ${email}:`, error)
+      throw new Error(error.message)
     }
 
-    const info = await transporter.sendMail(mailOptions)
-    console.log(`[Email] Verification email sent to ${email} (Message ID: ${info.messageId.split("@")[0]}...)`)
+    console.log(`[Email] Verification email sent to ${email} (Resend ID: ${data.id})`)
     return true
   } catch (error) {
     console.error(`[Email Error] Failed to send verification email to ${email}:`, error.message)
     throw error
   }
 }
-
