@@ -33,6 +33,11 @@ function createClientId() {
 }
 
 wss.on("connection", (ws) => {
+  ws.isAlive = true
+  ws.on("pong", () => {
+    ws.isAlive = true
+  })
+
   const clientId = createClientId()
   const client = { id: clientId, ws, role: null, streamId: null }
   clients.set(clientId, client)
@@ -59,7 +64,8 @@ wss.on("connection", (ws) => {
         streamInfo.broadcasterId = clientId
       } else if (msg.role === "viewer") {
         streamInfo.viewers.add(clientId)
-        const count = streamInfo.viewers.size
+        // Solo contar los viewers activos en el mapa clients
+        const count = Array.from(streamInfo.viewers).filter(v => clients.has(v)).length
         db.collection(STREAMS_COLLECTION).doc(msg.streamId).update({ viewerCount: count }).catch(() => {})
 
         const payloadCount = JSON.stringify({ type: "viewer-count", count, streamId: msg.streamId })
@@ -271,12 +277,14 @@ wss.on("connection", (ws) => {
           .update({
             status: "ended",
             endedAt: new Date().toISOString(),
+            viewerCount: 0, // Reiniciar contador a 0 al finalizar la transmisión
           })
           .catch(() => {})
       } else if (streamInfo) {
         streamInfo.viewers.delete(clientId)
         if (client.role === "viewer") {
-          const count = streamInfo.viewers.size
+          // Solo contar los viewers activos en el mapa clients
+          const count = Array.from(streamInfo.viewers).filter(v => clients.has(v)).length
           db.collection(STREAMS_COLLECTION).doc(client.streamId).update({ viewerCount: count }).catch(() => {})
 
           const payloadCount = JSON.stringify({ type: "viewer-count", count, streamId: client.streamId })
@@ -294,6 +302,21 @@ wss.on("connection", (ws) => {
   })
 })
 
+// Heartbeat Interval (Ping/Pong) - Limpia conexiones muertas cada 15 segundos
+const interval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      return ws.terminate() // Dispara 'close' automáticamente limpiando la memoria
+    }
+    ws.isAlive = false
+    ws.ping()
+  })
+}, 15000)
+
+wss.on("close", () => {
+  clearInterval(interval)
+})
+
 async function closeOrphanedLiveStreams() {
   try {
     const snap = await db
@@ -302,7 +325,7 @@ async function closeOrphanedLiveStreams() {
       .get()
     const endedAt = new Date().toISOString()
     for (const doc of snap.docs) {
-      await doc.ref.update({ status: "ended", endedAt })
+      await doc.ref.update({ status: "ended", endedAt, viewerCount: 0 }) // Reiniciar contador a 0
     }
     if (!snap.empty) {
       console.log(`[streams] Cerradas ${snap.size} transmisión(es) en vivo al iniciar (sin transmisor conectado)`)

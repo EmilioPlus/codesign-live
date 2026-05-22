@@ -85,9 +85,21 @@ export default function SidebarProjects() {
 
   return (
     <div className="flex flex-col h-full bg-surface-panel overflow-hidden border-r border-border">
-      <div className="p-4 border-b border-border flex justify-between items-center">
-        <Link to="/" className="text-lg font-semibold text-brand block truncate">
-          CoDesign LIVE
+      <div className="p-4 border-b border-border flex flex-col gap-3">
+        <div className="flex justify-between items-center">
+          <span className="text-lg font-bold text-brand truncate">
+            CoDesign LIVE
+          </span>
+        </div>
+        <Link 
+          to="/" 
+          className="w-full py-2 px-3 rounded-lg bg-surface hover:bg-surface-muted text-sm text-copy font-medium flex items-center justify-center gap-2 border border-border transition shadow-sm hover:scale-[1.01] active:scale-[0.99]"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+          Volver al Inicio
         </Link>
       </div>
 
