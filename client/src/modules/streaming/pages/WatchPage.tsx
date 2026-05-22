@@ -13,7 +13,7 @@ const rtcConfig: RTCConfiguration = {
 export default function WatchPage() {
   const { streamId } = useParams()
   const { user } = useAuth()
-  const { addMessage, registerWs, setActiveForum, addStroke, clearStrokes } = useStreamRoom()
+  const { addMessage, registerWs, setActiveForum, addStroke, clearStrokes, viewerCount, setViewerCount } = useStreamRoom()
   const mainVideoRef = useRef<HTMLVideoElement>(null)
   const overlayVideoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -31,7 +31,6 @@ export default function WatchPage() {
   const lastPointerSentRef = useRef<number>(0)
   const [error, setError] = useState<string | null>(null)
   const [isMuted, setIsMuted] = useState(true)
-  const [viewerCount, setViewerCount] = useState(0)
 
   // Estado para Modal de Invitación
   const [inviteFromId, setInviteFromId] = useState<string | null>(null)
