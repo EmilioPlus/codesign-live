@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from "react"
+import { Link } from "react-router-dom"
 import {
   createStreamApi,
   endStreamApi,
@@ -709,14 +710,22 @@ export default function StreamPlayer() {
       {/* Controles Transmisor */}
       <div className="flex flex-row overflow-x-auto sm:flex-wrap items-center gap-3 p-3 bg-surface-panel sm:rounded-lg border-y sm:border border-border shrink-0">
         {!isStreaming ? (
-          <button
-            type="button"
-            onClick={startStream}
-            disabled={starting}
-            className="px-4 py-2.5 sm:py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors shrink-0 whitespace-nowrap text-center"
-          >
-            {starting ? "Iniciando..." : "Iniciar transmisión de pantalla"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={startStream}
+              disabled={starting}
+              className="px-4 py-2.5 sm:py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors shrink-0 whitespace-nowrap text-center"
+            >
+              {starting ? "Iniciando..." : "Iniciar transmisión de pantalla"}
+            </button>
+            <Link
+              to="/"
+              className="px-4 py-2.5 sm:py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface border border-border transition-colors shrink-0 whitespace-nowrap text-center"
+            >
+              Volver al inicio
+            </Link>
+          </div>
         ) : (
           <>
             <button
@@ -726,6 +735,15 @@ export default function StreamPlayer() {
             >
               Detener transmisión
             </button>
+            <Link
+              to="/"
+              onClick={() => {
+                stopStream().catch(() => {})
+              }}
+              className="px-4 py-2.5 sm:py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface border border-border transition-colors shrink-0 whitespace-nowrap text-center"
+            >
+              Volver al inicio
+            </Link>
             {!isRecording ? (
               <button
                 type="button"
