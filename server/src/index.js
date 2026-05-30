@@ -134,7 +134,13 @@ wss.on("connection", (ws) => {
       if (client.streamId !== msg.streamId) return
       const streamInfo = streams.get(msg.streamId)
       if (!streamInfo) return
-      const payload = JSON.stringify({ type: "camera-toggle", streamId: msg.streamId, cameraOn: msg.cameraOn })
+      const payload = JSON.stringify({
+        type: "camera-toggle",
+        streamId: msg.streamId,
+        cameraOn: msg.cameraOn,
+        cameraStreamId: msg.cameraStreamId,
+        screenStreamId: msg.screenStreamId,
+      })
       streamInfo.viewers.forEach(viewerId => {
         const viewer = clients.get(viewerId)
         if (viewer) viewer.ws.send(payload)
@@ -162,11 +168,13 @@ wss.on("connection", (ws) => {
       if (!streamInfo.chatHistory) streamInfo.chatHistory = []
       streamInfo.chatHistory.push(fileMsg)
       if (streamInfo.chatHistory.length > 300) streamInfo.chatHistory.shift()
+      // Broadcast to all except sender
       streamInfo.viewers.forEach(viewerId => {
+        if (viewerId === clientId) return  // skip sender
         const viewer = clients.get(viewerId)
         if (viewer) viewer.ws.send(payload)
       })
-      if (streamInfo.broadcasterId) {
+      if (streamInfo.broadcasterId && streamInfo.broadcasterId !== clientId) {
         const broadcaster = clients.get(streamInfo.broadcasterId)
         if (broadcaster) broadcaster.ws.send(payload)
       }
@@ -240,11 +248,14 @@ wss.on("connection", (ws) => {
       if (streamInfo.chatHistory.length > 300) {
         streamInfo.chatHistory.shift()
       }
+      // Broadcast to all viewers EXCEPT the sender
       streamInfo.viewers.forEach((viewerId) => {
+        if (viewerId === clientId) return  // skip sender
         const viewer = clients.get(viewerId)
         if (viewer) viewer.ws.send(payload)
       })
-      if (streamInfo.broadcasterId) {
+      // Also send to broadcaster, unless the broadcaster IS the sender
+      if (streamInfo.broadcasterId && streamInfo.broadcasterId !== clientId) {
         const broadcaster = clients.get(streamInfo.broadcasterId)
         if (broadcaster) broadcaster.ws.send(payload)
       }

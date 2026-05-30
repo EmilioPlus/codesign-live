@@ -125,14 +125,29 @@ export default function StreamPlayer() {
             .forEach((s) => pc.removeTrack(s))
         })
         // Notify viewers camera is off
-        if (wsRef.current?.readyState === WebSocket.OPEN && streamIdRef.current) {
-          wsRef.current.send(JSON.stringify({
-            type: "camera-toggle",
-            streamId: streamIdRef.current,
-            cameraOn: false,
-          }))
-        }
+        sendSignal({
+          type: "camera-toggle",
+          streamId: streamIdRef.current,
+          cameraOn: false,
+          screenStreamId: screenStreamRef.current?.id || null,
+        })
         setCameraOn(false)
+
+        // Renegotiate with all viewers
+        peersRef.current.forEach(async (pc, viewerId) => {
+          try {
+            const offer = await pc.createOffer()
+            await pc.setLocalDescription(offer)
+            sendSignal({
+              type: "offer",
+              streamId: streamIdRef.current,
+              targetId: viewerId,
+              sdp: offer,
+            })
+          } catch (e) {
+            console.error("Error renegotiating on camera off:", e)
+          }
+        })
         return
       }
 
@@ -150,20 +165,36 @@ export default function StreamPlayer() {
           pc.addTrack(track, camStream)
         })
       })
-      // Notify viewers camera is on
-      if (wsRef.current?.readyState === WebSocket.OPEN && streamIdRef.current) {
-        wsRef.current.send(JSON.stringify({
-          type: "camera-toggle",
-          streamId: streamIdRef.current,
-          cameraOn: true,
-        }))
-      }
+      // Notify viewers camera is on with stream IDs
+      sendSignal({
+        type: "camera-toggle",
+        streamId: streamIdRef.current,
+        cameraOn: true,
+        cameraStreamId: camStream.id,
+        screenStreamId: screenStreamRef.current?.id || null,
+      })
       setCameraOn(true)
+
+      // Renegotiate with all viewers
+      peersRef.current.forEach(async (pc, viewerId) => {
+        try {
+          const offer = await pc.createOffer()
+          await pc.setLocalDescription(offer)
+          sendSignal({
+            type: "offer",
+            streamId: streamIdRef.current,
+            targetId: viewerId,
+            sdp: offer,
+          })
+        } catch (e) {
+          console.error("Error renegotiating on camera on:", e)
+        }
+      })
     } catch (e) {
       const message = e instanceof Error ? e.message : "No se pudo activar la cámara"
       setError(message)
     }
-  }, [cameraOn, micMuted])
+  }, [cameraOn, micMuted, sendSignal])
 
   const toggleMic = useCallback(() => {
     setMicMuted((prev) => {
@@ -211,9 +242,18 @@ export default function StreamPlayer() {
         sdp: offer,
       })
 
+      // Send current camera status and stream IDs to this specific viewer
+      sendSignal({
+        type: "camera-toggle",
+        streamId: streamIdRef.current,
+        cameraOn,
+        cameraStreamId: cameraStreamRef.current?.id || null,
+        screenStreamId: screenStreamRef.current?.id || null,
+      })
+
       peersRef.current.set(viewerId, pc)
     },
-    [rtcConfig, sendSignal]
+    [rtcConfig, sendSignal, cameraOn]
   )
 
   const handleSignalMessage = useCallback(
@@ -529,8 +569,14 @@ export default function StreamPlayer() {
     registerWs(ws)
   }, [handleSignalMessage, registerWs, setExclusiveUser])
 
+  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+
   const startStream = useCallback(async () => {
     setError(null)
+    if (isMobileDevice) {
+      setError("La transmisión de pantalla no está disponible en dispositivos móviles. Usa un navegador de escritorio (Chrome, Edge, Firefox) para transmitir.")
+      return
+    }
     // Guard: getDisplayMedia not available on mobile browsers
     if (!navigator.mediaDevices || !('getDisplayMedia' in navigator.mediaDevices)) {
       setError("La transmisión de pantalla no está disponible en este dispositivo. Usa un navegador de escritorio (Chrome, Edge, Firefox) para transmitir.")
@@ -557,7 +603,7 @@ export default function StreamPlayer() {
     } finally {
       setStarting(false)
     }
-  }, [startScreenCapture, setBroadcasterStreamId, connectSignaling])
+  }, [startScreenCapture, setBroadcasterStreamId, connectSignaling, isMobileDevice])
 
   const stopStream = useCallback(async () => {
     const sid = streamIdRef.current
@@ -765,14 +811,20 @@ export default function StreamPlayer() {
       <div className="flex flex-row overflow-x-auto sm:flex-wrap items-center gap-3 p-3 bg-surface-panel sm:rounded-lg border-y sm:border border-border shrink-0">
         {!isStreaming ? (
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={startStream}
-              disabled={starting}
-              className="px-4 py-2.5 sm:py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors shrink-0 whitespace-nowrap text-center"
-            >
-              {starting ? "Iniciando..." : "Iniciar transmisión de pantalla"}
-            </button>
+            {!isMobileDevice ? (
+              <button
+                type="button"
+                onClick={startStream}
+                disabled={starting}
+                className="px-4 py-2.5 sm:py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors shrink-0 whitespace-nowrap text-center"
+              >
+                {starting ? "Iniciando..." : "Iniciar transmisión de pantalla"}
+              </button>
+            ) : (
+              <div className="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 select-none">
+                ⚠️ Transmisión no disponible en móviles. Accede desde tu computador.
+              </div>
+            )}
             <Link
               to="/"
               className="px-4 py-2.5 sm:py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium hover:bg-surface border border-border transition-colors shrink-0 whitespace-nowrap text-center"
