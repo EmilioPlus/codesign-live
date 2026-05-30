@@ -215,7 +215,7 @@ export function StreamRoomProvider({
     }))
   }, [streamId, addMessage])
 
-  const inviteExclusiveViewer = useCallback((targetId: string, viewerName: string, broadcasterName?: string) => {
+  const inviteExclusiveViewer = useCallback((targetId: string, _viewerName: string, broadcasterName?: string) => {
     if (!streamId) return
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return
