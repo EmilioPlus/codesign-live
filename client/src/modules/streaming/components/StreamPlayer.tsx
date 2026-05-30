@@ -539,6 +539,7 @@ export default function StreamPlayer() {
           type: "join",
           role: "broadcaster",
           streamId: streamIdRef.current,
+          userName: user?.name || "Transmisor",
         })
       )
     }

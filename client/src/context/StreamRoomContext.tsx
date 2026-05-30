@@ -112,13 +112,12 @@ export function StreamRoomProvider({
   const addMessage = useCallback((msg: Omit<ChatMessage, "id">) => {
     const timestamp = msg.timestamp ?? Date.now()
     setMessages((prev) => {
-      // Evitar mensajes duplicados (mismo id/timestamp o mismo texto/usuario dentro de 3 segundos)
       const isDuplicate = prev.some(
         (m) =>
           (m.clientId === msg.clientId && m.timestamp === timestamp) ||
-          (m.userName === msg.userName &&
-            m.text === msg.text &&
-            Math.abs((m.timestamp || 0) - timestamp) < 3000)
+          (m.userName.trim().toLowerCase() === msg.userName.trim().toLowerCase() &&
+            m.text.trim() === msg.text.trim() &&
+            Math.abs((m.timestamp || 0) - timestamp) < 5000)
       )
       if (isDuplicate) return prev
 
@@ -215,13 +214,14 @@ export function StreamRoomProvider({
     }))
   }, [streamId, addMessage])
 
-  const inviteExclusiveViewer = useCallback((targetId: string, _viewerName: string, broadcasterName?: string) => {
+  const inviteExclusiveViewer = useCallback((targetId: string, viewerName: string, broadcasterName?: string) => {
     if (!streamId) return
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return
     ws.send(JSON.stringify({
       type: "invite-exclusive",
       targetId,
+      targetName: viewerName,
       streamId,
       userName: broadcasterName || "El transmisor"
     }))
