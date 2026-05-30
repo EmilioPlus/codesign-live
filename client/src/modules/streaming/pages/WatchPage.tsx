@@ -51,6 +51,7 @@ export default function WatchPage() {
     categories: string[]
   } | null>(null)
   const [streamTitle, setStreamTitle] = useState<string>("")  // título efímero via WS
+  const [streamerCameraOn, setStreamerCameraOn] = useState(false)  // cámara del transmisor visible para viewers
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!pointerAllowedRef.current) return
@@ -144,12 +145,19 @@ export default function WatchPage() {
       if (!remoteStream || event.track.kind !== "video") return
       if (assignedStreamsRef.current.has(remoteStream)) return
       assignedStreamsRef.current.add(remoteStream)
-      
-      const isScreen = assignedStreamsRef.current.size === 1
+
+      // Screen share stream has only video track (no audio from screen normally)
+      // Camera stream has both video and audio tracks
+      const hasAudioTrack = remoteStream.getAudioTracks().length > 0
+      const isScreen = !hasAudioTrack || assignedStreamsRef.current.size === 1
       const videoEl = isScreen ? mainVideoRef.current : overlayVideoRef.current
       if (videoEl) {
         videoEl.srcObject = remoteStream
         videoEl.play().catch(console.error)
+        // If this is the camera stream, show it (camera must be on for track to arrive)
+        if (!isScreen) {
+          setStreamerCameraOn(true)
+        }
       }
     }
 
@@ -227,22 +235,24 @@ export default function WatchPage() {
 
       if (msg.type === "chat-message") {
         addMessage({
-          text: msg.text,
+          text: msg.text || "",
           userName: msg.userName ?? "Anónimo",
           clientId: msg.clientId,
           timestamp: msg.timestamp ?? Date.now(),
-        })
+          ...(msg.fileUrl ? { fileUrl: msg.fileUrl, fileName: msg.fileName, fileType: msg.fileType } : {})
+        } as any)
         return
       }
 
       if (msg.type === "chat-history" && Array.isArray(msg.messages)) {
         msg.messages.forEach((m: any) => {
           addMessage({
-            text: m.text,
+            text: m.text || "",
             userName: m.userName ?? "Anónimo",
             clientId: m.clientId,
             timestamp: m.timestamp ?? Date.now(),
-          })
+            ...(m.fileUrl ? { fileUrl: m.fileUrl, fileName: m.fileName, fileType: m.fileType } : {})
+          } as any)
         })
         return
       }
@@ -365,6 +375,29 @@ export default function WatchPage() {
         return
       }
 
+      // Cámara del transmisor: mostrar/ocultar overlay en viewer
+      if (msg.type === "camera-toggle") {
+        setStreamerCameraOn(!!msg.cameraOn)
+        if (!msg.cameraOn && overlayVideoRef.current) {
+          overlayVideoRef.current.srcObject = null
+        }
+        return
+      }
+
+      // Mensaje de archivo compartido por usuario exclusivo
+      if (msg.type === "file-message" && msg.fileUrl) {
+        addMessage({
+          text: "",
+          userName: msg.userName ?? "Anónimo",
+          clientId: msg.clientId,
+          timestamp: msg.timestamp ?? Date.now(),
+          fileUrl: msg.fileUrl,
+          fileName: msg.fileName,
+          fileType: msg.fileType,
+        } as any)
+        return
+      }
+
     }
 
     ws.onerror = () => {
@@ -416,13 +449,14 @@ export default function WatchPage() {
           className="w-full h-auto max-h-[80vh] object-contain pointer-events-none"
         />
         
+        {/* Overlay video de cámara — solo visible si el transmisor la ha activado */}
         <video
           ref={overlayVideoRef}
           autoPlay
           playsInline
           muted={isMuted}
           controls={false}
-          className="absolute bottom-4 right-4 w-48 h-32 rounded-lg border border-border bg-black shadow-lg object-cover z-10"
+          className={`absolute bottom-4 right-4 w-48 h-32 rounded-lg border border-border bg-black shadow-lg object-cover z-10 transition-opacity duration-300 ${streamerCameraOn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         />
         
         {error && (
