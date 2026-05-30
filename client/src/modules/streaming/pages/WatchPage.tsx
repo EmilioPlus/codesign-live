@@ -202,6 +202,7 @@ export default function WatchPage() {
           type: "join",
           role: "viewer",
           streamId,
+          userName: user?.name || "Espectador",
         })
       )
       getActiveForumApi(streamId).then(({ forum }) => setActiveForum(forum))
@@ -497,7 +498,8 @@ export default function WatchPage() {
           playsInline
           muted={isMuted}
           controls={false}
-          className={`absolute bottom-4 right-4 w-48 h-32 rounded-lg border border-border bg-black shadow-lg object-cover z-10 transition-opacity duration-300 ${streamerCameraOn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          style={{ display: streamerCameraOn ? 'block' : 'none' }}
+          className="absolute bottom-4 right-4 w-48 h-32 rounded-lg border border-border bg-black shadow-lg object-cover z-10"
         />
         
         {error && (

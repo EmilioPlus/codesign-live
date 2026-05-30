@@ -53,6 +53,7 @@ wss.on("connection", (ws) => {
     if (msg.type === "join" && msg.streamId && msg.role) {
       client.role = msg.role
       client.streamId = msg.streamId
+      client.userName = msg.userName || "Anónimo"
 
       let streamInfo = streams.get(msg.streamId)
       if (!streamInfo) {
@@ -116,13 +117,27 @@ wss.on("connection", (ws) => {
       "pointer-move", "pointer-permission"
     ]
     if (routeTypes.includes(msg.type)) {
-      const targetId = msg.targetId
+      let targetId = msg.targetId
+      // Fallback: Si se recibe targetName, buscar en la sala al usuario activo que coincida
+      if (msg.targetName && msg.streamId) {
+        const streamInfo = streams.get(msg.streamId)
+        if (streamInfo) {
+          const activeViewerId = Array.from(streamInfo.viewers).find(vId => {
+            const v = clients.get(vId)
+            return v && v.userName === msg.targetName
+          })
+          if (activeViewerId) {
+            targetId = activeViewerId
+          }
+        }
+      }
       if (!targetId) return
       const target = clients.get(targetId)
       if (!target) return
       target.ws.send(
         JSON.stringify({
           ...msg,
+          targetId,
           fromId: clientId,
         })
       )
