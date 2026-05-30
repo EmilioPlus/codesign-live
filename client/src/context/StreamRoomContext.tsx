@@ -4,6 +4,7 @@ import {
   useState,
   useCallback,
   useRef,
+  useEffect,
   type ReactNode,
 } from "react"
 
@@ -68,7 +69,7 @@ type StreamRoomContextValue = {
   setActiveProject: (p: ProjectFile | null) => void
   exclusiveUser: ExclusiveUser | null
   setExclusiveUser: (user: ExclusiveUser | null) => void
-  inviteExclusiveViewer: (clientId: string, userName: string) => void
+  inviteExclusiveViewer: (clientId: string, userName: string, broadcasterName?: string) => void
   revokeExclusiveViewer: (clientId?: string) => void
   strokes: CanvasStroke[]
   addStroke: (stroke: CanvasStroke) => void
@@ -100,9 +101,35 @@ export function StreamRoomProvider({
 
   const streamId = streamIdFromParams ?? broadcasterStreamId
 
+  // Reset room state when streamId changes to prevent leaks and old messages showing up
+  useEffect(() => {
+    setMessages([])
+    setActiveForum(null)
+    setExclusiveUser(null)
+    setStrokes([])
+  }, [streamId])
+
   const addMessage = useCallback((msg: Omit<ChatMessage, "id">) => {
+    const timestamp = msg.timestamp ?? Date.now()
     setMessages((prev) => {
-      const next = [...prev, { ...msg, id: `${msg.clientId}-${msg.timestamp}` }]
+      // Evitar mensajes duplicados (mismo id/timestamp o mismo texto/usuario dentro de 3 segundos)
+      const isDuplicate = prev.some(
+        (m) =>
+          (m.clientId === msg.clientId && m.timestamp === timestamp) ||
+          (m.userName === msg.userName &&
+            m.text === msg.text &&
+            Math.abs((m.timestamp || 0) - timestamp) < 3000)
+      )
+      if (isDuplicate) return prev
+
+      const next = [
+        ...prev,
+        {
+          ...msg,
+          timestamp,
+          id: `${msg.clientId || "msg"}-${timestamp}`,
+        },
+      ]
       if (next.length > MAX_MESSAGES) return next.slice(-MAX_MESSAGES)
       return next
     })
@@ -112,15 +139,24 @@ export function StreamRoomProvider({
     if (!streamId || !text.trim()) return
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return
+    const trimmed = text.trim()
+    const timestamp = Date.now()
+    // Add optimistically — server no longer echoes back to sender
+    addMessage({
+      text: trimmed,
+      userName: userName || "Anónimo",
+      clientId: "__local__",
+      timestamp,
+    })
     ws.send(
       JSON.stringify({
         type: "chat",
         streamId,
-        text: text.trim(),
+        text: trimmed,
         userName: userName || "Anónimo",
       })
     )
-  }, [streamId])
+  }, [streamId, addMessage])
 
   const sendReaction = useCallback((emoji: string, userName: string) => {
     if (!streamId) return
@@ -154,25 +190,41 @@ export function StreamRoomProvider({
     ws.send(JSON.stringify({ type: "forum-created", streamId, forum }))
   }, [streamId])
 
-  const sendFileMessage = useCallback((payload: { fileUrl: string; fileName: string; fileType: string; userName: string }) => {
+  const sendFileMessage = useCallback((p: { fileUrl: string; fileName: string; fileType: string; userName: string }) => {
+    if (!streamId) return
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    const timestamp = Date.now()
+    // Optimistic local insert — server no longer echoes back to sender
+    addMessage({
+      text: "",
+      userName: p.userName || "Anónimo",
+      clientId: "__local__",
+      timestamp,
+      fileUrl: p.fileUrl,
+      fileName: p.fileName,
+      fileType: p.fileType,
+    } as any)
+    ws.send(JSON.stringify({
+      type: "file-message",
+      streamId,
+      fileUrl: p.fileUrl,
+      fileName: p.fileName,
+      fileType: p.fileType,
+      userName: p.userName,
+    }))
+  }, [streamId, addMessage])
+
+  const inviteExclusiveViewer = useCallback((targetId: string, viewerName: string, broadcasterName?: string) => {
     if (!streamId) return
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return
     ws.send(JSON.stringify({
-      type: "file-message",
+      type: "invite-exclusive",
+      targetId,
       streamId,
-      fileUrl: payload.fileUrl,
-      fileName: payload.fileName,
-      fileType: payload.fileType,
-      userName: payload.userName,
+      userName: broadcasterName || "El transmisor"
     }))
-  }, [streamId])
-
-  const inviteExclusiveViewer = useCallback((targetId: string, userName: string) => {
-    if (!streamId) return
-    const ws = wsRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
-    ws.send(JSON.stringify({ type: "invite-exclusive", targetId, streamId, userName }))
   }, [streamId])
 
   const revokeExclusiveViewer = useCallback((targetId?: string) => {

@@ -21,6 +21,8 @@ export default function WatchPage() {
   const broadcasterIdRef = useRef<string | null>(null)
   const assignedStreamsRef = useRef<Set<MediaStream>>(new Set())
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([])
+  const screenStreamIdRef = useRef<string | null>(null)
+  const cameraStreamIdRef = useRef<string | null>(null)
   
   // Exclusividad
   const exclusivePcRef = useRef<RTCPeerConnection | null>(null)
@@ -143,18 +145,33 @@ export default function WatchPage() {
     pc.ontrack = (event) => {
       const [remoteStream] = event.streams
       if (!remoteStream || event.track.kind !== "video") return
-      if (assignedStreamsRef.current.has(remoteStream)) return
+
+      // Evitar duplicados pero asegurar que siga reproduciéndose si llega otro track
+      if (assignedStreamsRef.current.has(remoteStream)) {
+        const isScreen = !(cameraStreamIdRef.current && remoteStream.id === cameraStreamIdRef.current)
+        const videoEl = isScreen ? mainVideoRef.current : overlayVideoRef.current
+        if (videoEl && videoEl.srcObject !== remoteStream) {
+          videoEl.srcObject = remoteStream
+          videoEl.play().catch(() => {})
+        }
+        return
+      }
       assignedStreamsRef.current.add(remoteStream)
 
-      // Screen share stream has only video track (no audio from screen normally)
-      // Camera stream has both video and audio tracks
-      const hasAudioTrack = remoteStream.getAudioTracks().length > 0
-      const isScreen = !hasAudioTrack || assignedStreamsRef.current.size === 1
+      let isScreen = true
+      if (cameraStreamIdRef.current && remoteStream.id === cameraStreamIdRef.current) {
+        isScreen = false
+      } else if (screenStreamIdRef.current && remoteStream.id === screenStreamIdRef.current) {
+        isScreen = true
+      } else {
+        const hasAudioTrack = remoteStream.getAudioTracks().length > 0
+        isScreen = !hasAudioTrack
+      }
+
       const videoEl = isScreen ? mainVideoRef.current : overlayVideoRef.current
       if (videoEl) {
         videoEl.srcObject = remoteStream
         videoEl.play().catch(console.error)
-        // If this is the camera stream, show it (camera must be on for track to arrive)
         if (!isScreen) {
           setStreamerCameraOn(true)
         }
@@ -378,8 +395,25 @@ export default function WatchPage() {
       // Cámara del transmisor: mostrar/ocultar overlay en viewer
       if (msg.type === "camera-toggle") {
         setStreamerCameraOn(!!msg.cameraOn)
-        if (!msg.cameraOn && overlayVideoRef.current) {
-          overlayVideoRef.current.srcObject = null
+        if (msg.cameraStreamId) cameraStreamIdRef.current = msg.cameraStreamId
+        if (msg.screenStreamId) screenStreamIdRef.current = msg.screenStreamId
+
+        if (!msg.cameraOn) {
+          if (overlayVideoRef.current) {
+            overlayVideoRef.current.srcObject = null
+          }
+        } else {
+          // Si se enciende la cámara, buscar en los streams recibidos y asignarlo al overlay
+          const streams = Array.from(assignedStreamsRef.current)
+          streams.forEach((str) => {
+            if (str.id === msg.cameraStreamId && overlayVideoRef.current) {
+              overlayVideoRef.current.srcObject = str
+              overlayVideoRef.current.play().catch(() => {})
+            } else if (str.id === msg.screenStreamId && mainVideoRef.current) {
+              mainVideoRef.current.srcObject = str
+              mainVideoRef.current.play().catch(() => {})
+            }
+          })
         }
         return
       }
@@ -410,14 +444,21 @@ export default function WatchPage() {
 
     return () => {
       isCleanedUp = true
+      // Silence all handlers FIRST so the old socket can't call addMessage after cleanup
+      ws.onmessage = null
+      ws.onopen = null
+      ws.onerror = null
+      ws.onclose = null
       registerWs(null)
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close()
       }
       wsRef.current = null
+      pc.ontrack = null
+      pc.onicecandidate = null
       pc.close()
       pcRef.current = null
-      
+
       if (exclusiveMicRef.current) {
         exclusiveMicRef.current.getTracks().forEach(t => t.stop())
       }
