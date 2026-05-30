@@ -144,36 +144,26 @@ export default function WatchPage() {
 
     pc.ontrack = (event) => {
       const [remoteStream] = event.streams
-      if (!remoteStream || event.track.kind !== "video") return
+      if (!remoteStream) return
 
-      // Evitar duplicados pero asegurar que siga reproduciéndose si llega otro track
-      if (assignedStreamsRef.current.has(remoteStream)) {
-        const isScreen = !(cameraStreamIdRef.current && remoteStream.id === cameraStreamIdRef.current)
-        const videoEl = isScreen ? mainVideoRef.current : overlayVideoRef.current
-        if (videoEl && videoEl.srcObject !== remoteStream) {
-          videoEl.srcObject = remoteStream
-          videoEl.play().catch(() => {})
-        }
-        return
-      }
+      // Store every received stream by its ID for later lookup by camera-toggle
       assignedStreamsRef.current.add(remoteStream)
 
-      let isScreen = true
+      // Determine if this stream is the main screen share or the camera overlay
+      // RULE: only assign to overlayVideoRef if cameraStreamIdRef explicitly matches.
+      //       Never auto-show the overlay — that is controlled solely by camera-toggle.
       if (cameraStreamIdRef.current && remoteStream.id === cameraStreamIdRef.current) {
-        isScreen = false
-      } else if (screenStreamIdRef.current && remoteStream.id === screenStreamIdRef.current) {
-        isScreen = true
+        // Camera stream arrived: wire it up but visibility is controlled by streamerCameraOn state
+        if (overlayVideoRef.current && overlayVideoRef.current.srcObject !== remoteStream) {
+          overlayVideoRef.current.srcObject = remoteStream
+          overlayVideoRef.current.play().catch(() => {})
+        }
+        // NOTE: do NOT call setStreamerCameraOn(true) here — camera-toggle already did it
       } else {
-        const hasAudioTrack = remoteStream.getAudioTracks().length > 0
-        isScreen = !hasAudioTrack
-      }
-
-      const videoEl = isScreen ? mainVideoRef.current : overlayVideoRef.current
-      if (videoEl) {
-        videoEl.srcObject = remoteStream
-        videoEl.play().catch(console.error)
-        if (!isScreen) {
-          setStreamerCameraOn(true)
+        // Everything else goes to the main screen video
+        if (mainVideoRef.current && mainVideoRef.current.srcObject !== remoteStream) {
+          mainVideoRef.current.srcObject = remoteStream
+          mainVideoRef.current.play().catch(console.error)
         }
       }
     }
@@ -257,6 +247,7 @@ export default function WatchPage() {
           userName: msg.userName ?? "Anónimo",
           clientId: msg.clientId,
           timestamp: msg.timestamp ?? Date.now(),
+          msgId: msg.msgId,  // pass server msgId for absolute dedup
           ...(msg.fileUrl ? { fileUrl: msg.fileUrl, fileName: msg.fileName, fileType: msg.fileType } : {})
         } as any)
         return
@@ -393,28 +384,41 @@ export default function WatchPage() {
         return
       }
 
-      // Cámara del transmisor: mostrar/ocultar overlay en viewer
+      // Cámara del transmisor: ÚNICA fuente de verdad para mostrar/ocultar el overlay
       if (msg.type === "camera-toggle") {
-        setStreamerCameraOn(!!msg.cameraOn)
+        // 1. Actualizar refs de IDs primero para que ontrack pueda rutear correctamente
         if (msg.cameraStreamId) cameraStreamIdRef.current = msg.cameraStreamId
         if (msg.screenStreamId) screenStreamIdRef.current = msg.screenStreamId
 
         if (!msg.cameraOn) {
+          // Cámara apagada: limpiar y ocultar
           if (overlayVideoRef.current) {
+            overlayVideoRef.current.pause()
             overlayVideoRef.current.srcObject = null
           }
+          setStreamerCameraOn(false)
         } else {
-          // Si se enciende la cámara, buscar en los streams recibidos y asignarlo al overlay
-          const streams = Array.from(assignedStreamsRef.current)
-          streams.forEach((str) => {
-            if (str.id === msg.cameraStreamId && overlayVideoRef.current) {
-              overlayVideoRef.current.srcObject = str
+          // Cámara encendida: buscar el stream ya recibido o esperar a ontrack
+          setStreamerCameraOn(true)
+          if (msg.cameraStreamId && overlayVideoRef.current) {
+            // Buscar en los streams ya almacenados
+            const cameraStream = Array.from(assignedStreamsRef.current)
+              .find(s => s.id === msg.cameraStreamId)
+            if (cameraStream) {
+              overlayVideoRef.current.srcObject = cameraStream
               overlayVideoRef.current.play().catch(() => {})
-            } else if (str.id === msg.screenStreamId && mainVideoRef.current) {
-              mainVideoRef.current.srcObject = str
+            }
+            // Si no llegó aún, ontrack lo asignará en cuanto llegue (ya tiene el ID registrado)
+          }
+          // También reasignar pantalla si se necesita
+          if (msg.screenStreamId && mainVideoRef.current) {
+            const screenStream = Array.from(assignedStreamsRef.current)
+              .find(s => s.id === msg.screenStreamId)
+            if (screenStream && mainVideoRef.current.srcObject !== screenStream) {
+              mainVideoRef.current.srcObject = screenStream
               mainVideoRef.current.play().catch(() => {})
             }
-          })
+          }
         }
         return
       }

@@ -168,6 +168,7 @@ wss.on("connection", (ws) => {
       if (client.streamId !== msg.streamId) return
       const streamInfo = streams.get(msg.streamId)
       if (!streamInfo) return
+      const msgId = `srv-file-${Date.now()}-${Math.random().toString(36).slice(2)}`
       const fileMsg = {
         type: "file-message",
         streamId: msg.streamId,
@@ -177,6 +178,7 @@ wss.on("connection", (ws) => {
         userName: msg.userName || "Anónimo",
         clientId,
         timestamp: Date.now(),
+        msgId,
       }
       const payload = JSON.stringify(fileMsg)
       // Add to chat history
@@ -248,6 +250,8 @@ wss.on("connection", (ws) => {
       if (client.streamId !== msg.streamId) return
       const streamInfo = streams.get(msg.streamId)
       if (!streamInfo) return
+      // Generate a unique server-side msgId so every recipient can deduplicate by ID
+      const msgId = `srv-${Date.now()}-${Math.random().toString(36).slice(2)}`
       const chatMsg = {
         type: "chat-message",
         streamId: msg.streamId,
@@ -255,6 +259,7 @@ wss.on("connection", (ws) => {
         userName: msg.userName || "Anónimo",
         clientId,
         timestamp: Date.now(),
+        msgId,  // unique ID for absolute client-side deduplication
       }
       const payload = JSON.stringify(chatMsg)
 
@@ -265,7 +270,7 @@ wss.on("connection", (ws) => {
       }
       // Broadcast to all viewers EXCEPT the sender
       streamInfo.viewers.forEach((viewerId) => {
-        if (viewerId === clientId) return  // skip sender
+        if (viewerId === clientId) return  // skip sender — they already optimistically added it
         const viewer = clients.get(viewerId)
         if (viewer) viewer.ws.send(payload)
       })
