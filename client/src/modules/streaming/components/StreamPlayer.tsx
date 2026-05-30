@@ -118,6 +118,20 @@ export default function StreamPlayer() {
         if (cameraVideoRef.current) {
           cameraVideoRef.current.srcObject = null
         }
+        // Remove camera tracks from all peer connections
+        peersRef.current.forEach((pc) => {
+          pc.getSenders()
+            .filter((s) => s.track && s.track.kind === "video" && s.track !== screenStreamRef.current?.getVideoTracks()[0])
+            .forEach((s) => pc.removeTrack(s))
+        })
+        // Notify viewers camera is off
+        if (wsRef.current?.readyState === WebSocket.OPEN && streamIdRef.current) {
+          wsRef.current.send(JSON.stringify({
+            type: "camera-toggle",
+            streamId: streamIdRef.current,
+            cameraOn: false,
+          }))
+        }
         setCameraOn(false)
         return
       }
@@ -130,6 +144,20 @@ export default function StreamPlayer() {
       camStream.getAudioTracks().forEach((track) => {
         track.enabled = !micMuted
       })
+      // Add camera tracks to all existing peer connections
+      peersRef.current.forEach((pc) => {
+        camStream.getTracks().forEach((track) => {
+          pc.addTrack(track, camStream)
+        })
+      })
+      // Notify viewers camera is on
+      if (wsRef.current?.readyState === WebSocket.OPEN && streamIdRef.current) {
+        wsRef.current.send(JSON.stringify({
+          type: "camera-toggle",
+          streamId: streamIdRef.current,
+          cameraOn: true,
+        }))
+      }
       setCameraOn(true)
     } catch (e) {
       const message = e instanceof Error ? e.message : "No se pudo activar la cámara"
@@ -360,22 +388,24 @@ export default function StreamPlayer() {
 
       if (msg.type === "chat-message") {
         addMessage({
-          text: msg.text,
+          text: msg.text || "",
           userName: msg.userName ?? "Anónimo",
           clientId: msg.clientId,
           timestamp: msg.timestamp ?? Date.now(),
-        })
+          ...(msg.fileUrl ? { fileUrl: msg.fileUrl, fileName: msg.fileName, fileType: msg.fileType } : {})
+        } as any)
         return
       }
 
       if (msg.type === "chat-history" && Array.isArray(msg.messages)) {
         msg.messages.forEach((m: any) => {
           addMessage({
-            text: m.text,
+            text: m.text || "",
             userName: m.userName ?? "Anónimo",
             clientId: m.clientId,
             timestamp: m.timestamp ?? Date.now(),
-          })
+            ...(m.fileUrl ? { fileUrl: m.fileUrl, fileName: m.fileName, fileType: m.fileType } : {})
+          } as any)
         })
         return
       }
@@ -442,6 +472,20 @@ export default function StreamPlayer() {
         addFloatingReaction(msg.emoji)
         return
       }
+
+      // Mensaje de archivo compartido (broadcaster recibe también)
+      if (msg.type === "file-message" && msg.fileUrl) {
+        addMessage({
+          text: "",
+          userName: msg.userName ?? "Anónimo",
+          clientId: msg.clientId,
+          timestamp: msg.timestamp ?? Date.now(),
+          fileUrl: msg.fileUrl,
+          fileName: msg.fileName,
+          fileType: msg.fileType,
+        } as any)
+        return
+      }
     },
     [createPeerForViewer, addMessage, addFloatingReaction]
   )
@@ -487,6 +531,11 @@ export default function StreamPlayer() {
 
   const startStream = useCallback(async () => {
     setError(null)
+    // Guard: getDisplayMedia not available on mobile browsers
+    if (!navigator.mediaDevices || !('getDisplayMedia' in navigator.mediaDevices)) {
+      setError("La transmisión de pantalla no está disponible en este dispositivo. Usa un navegador de escritorio (Chrome, Edge, Firefox) para transmitir.")
+      return
+    }
     setStarting(true)
     try {
       const { stream } = await createStreamApi()
@@ -499,6 +548,12 @@ export default function StreamPlayer() {
     } catch (e) {
       const message = e instanceof Error ? e.message : "No se pudo iniciar la transmisión"
       setError(message)
+      // If stream was created but capture failed, end it to avoid phantom streams
+      if (streamIdRef.current) {
+        try { await endStreamApi(streamIdRef.current) } catch {}
+        setBroadcasterStreamId(null)
+        streamIdRef.current = null
+      }
     } finally {
       setStarting(false)
     }

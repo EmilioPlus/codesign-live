@@ -281,6 +281,24 @@ export const uploadFileApi = async (file: File): Promise<{ fileUrl: string }> =>
   return handleResponse(response)
 }
 
+// Upload a chat document (PDF, Excel, TXT) — only for exclusive users
+export const uploadChatFileApi = async (file: File): Promise<{ fileUrl: string }> => {
+  const formData = new FormData()
+  formData.append("file", file)
+  formData.append("isChat", "true")
+
+  const token = getStoredToken()
+  const headers: HeadersInit = {}
+  if (token) headers["Authorization"] = `Bearer ${token}`
+
+  const response = await fetch(`${API_URL}/upload`, {
+    method: "POST",
+    headers,
+    body: formData,
+  })
+  return handleResponse(response)
+}
+
 export const createProjectApi = async (data: { userId: string, title: string, fileUrl: string, type: "2d" | "3d" }): Promise<ProjectFile> => {
   const response = await fetch(`${API_URL}/projects`, {
     method: "POST",
