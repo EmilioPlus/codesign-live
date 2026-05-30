@@ -445,6 +445,7 @@ export default function StreamPlayer() {
             userName: m.userName ?? "Anónimo",
             clientId: m.clientId,
             timestamp: m.timestamp ?? Date.now(),
+            msgId: m.msgId,  // carry server msgId for dedup
             ...(m.fileUrl ? { fileUrl: m.fileUrl, fileName: m.fileName, fileType: m.fileType } : {})
           } as any)
         })
