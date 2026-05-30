@@ -432,6 +432,7 @@ export default function StreamPlayer() {
           userName: msg.userName ?? "Anónimo",
           clientId: msg.clientId,
           timestamp: msg.timestamp ?? Date.now(),
+          msgId: msg.msgId,  // server-generated dedup ID
           ...(msg.fileUrl ? { fileUrl: msg.fileUrl, fileName: msg.fileName, fileType: msg.fileType } : {})
         } as any)
         return
@@ -449,12 +450,19 @@ export default function StreamPlayer() {
         })
         return
       }
-
       if (msg.type === "viewer-joined") {
         await createPeerForViewer(msg.viewerId as string)
+        // Notificar al espectador que se acaba de unir el estado actual de la cámara
+        sendSignal({
+          type: "camera-toggle",
+          streamId: streamIdRef.current,
+          targetId: msg.viewerId,
+          cameraOn,
+          cameraStreamId: cameraStreamRef.current?.id || null,
+          screenStreamId: screenStreamRef.current?.id || null,
+        })
         return
       }
-
       if (msg.type === "viewer-count") {
         setViewerCount(msg.count ?? 0)
         return

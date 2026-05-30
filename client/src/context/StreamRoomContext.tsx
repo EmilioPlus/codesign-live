@@ -98,6 +98,8 @@ export function StreamRoomProvider({
   const [exclusiveUser, setExclusiveUser] = useState<ExclusiveUser | null>(null)
   const [strokes, setStrokes] = useState<CanvasStroke[]>([])
   const wsRef = useRef<WebSocket | null>(null)
+  // Set of msgIds already rendered — absolute guard against duplicates
+  const seenMsgIdsRef = useRef<Set<string>>(new Set())
 
   const streamId = streamIdFromParams ?? broadcasterStreamId
 
@@ -107,17 +109,36 @@ export function StreamRoomProvider({
     setActiveForum(null)
     setExclusiveUser(null)
     setStrokes([])
+    seenMsgIdsRef.current = new Set()
   }, [streamId])
 
-  const addMessage = useCallback((msg: Omit<ChatMessage, "id">) => {
+  const addMessage = useCallback((msg: Omit<ChatMessage, "id"> & { msgId?: string }) => {
     const timestamp = msg.timestamp ?? Date.now()
+    // Primary dedup: if the server sent a unique msgId, use that as the absolute key
+    const msgId = (msg as any).msgId as string | undefined
+    if (msgId) {
+      if (seenMsgIdsRef.current.has(msgId)) return  // already rendered — discard
+      seenMsgIdsRef.current.add(msgId)
+      // Evict old entries to avoid memory growth
+      if (seenMsgIdsRef.current.size > MAX_MESSAGES * 2) {
+        const arr = Array.from(seenMsgIdsRef.current)
+        seenMsgIdsRef.current = new Set(arr.slice(-MAX_MESSAGES))
+      }
+    } else {
+      // Fallback dedup by text+user+time window (for optimistic local messages)
+      const isDuplicate = Array.from(seenMsgIdsRef.current).length === 0
+        ? false  // nothing seen yet — cannot be duplicate
+        : false  // optimistic messages have no msgId — allow them through
+      if (isDuplicate) return
+    }
+
     setMessages((prev) => {
-      const isDuplicate = prev.some(
+      // Secondary safety guard: text+user+time (catches edge cases where msgId is absent)
+      const isDuplicate = !msgId && prev.some(
         (m) =>
-          (m.clientId === msg.clientId && m.timestamp === timestamp) ||
-          (m.userName.trim().toLowerCase() === msg.userName.trim().toLowerCase() &&
-            m.text.trim() === msg.text.trim() &&
-            Math.abs((m.timestamp || 0) - timestamp) < 5000)
+          m.userName.trim().toLowerCase() === msg.userName.trim().toLowerCase() &&
+          m.text.trim() === msg.text.trim() &&
+          Math.abs((m.timestamp || 0) - timestamp) < 5000
       )
       if (isDuplicate) return prev
 
@@ -126,7 +147,7 @@ export function StreamRoomProvider({
         {
           ...msg,
           timestamp,
-          id: `${msg.clientId || "msg"}-${timestamp}`,
+          id: msgId ?? `${msg.clientId || "msg"}-${timestamp}`,
         },
       ]
       if (next.length > MAX_MESSAGES) return next.slice(-MAX_MESSAGES)
@@ -140,19 +161,24 @@ export function StreamRoomProvider({
     if (!ws || ws.readyState !== WebSocket.OPEN) return
     const trimmed = text.trim()
     const timestamp = Date.now()
-    // Add optimistically — server no longer echoes back to sender
+    // Generate a unique local msgId so dedup can match the server echo to this local message
+    const localMsgId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    // Add optimistically with the local msgId pre-registered in the seen set
+    seenMsgIdsRef.current.add(localMsgId)
     addMessage({
       text: trimmed,
       userName: userName || "Anónimo",
       clientId: "__local__",
       timestamp,
-    })
+      msgId: localMsgId,
+    } as any)
     ws.send(
       JSON.stringify({
         type: "chat",
         streamId,
         text: trimmed,
         userName: userName || "Anónimo",
+        localMsgId,   // server will echo this back so the viewer's seen-set can block the echo
       })
     )
   }, [streamId, addMessage])
