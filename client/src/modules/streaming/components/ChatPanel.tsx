@@ -242,7 +242,7 @@ export default function ChatPanel() {
 
                     {isBroadcasterView && !isExclusive && !isMyMessage && msg.clientId && (
                       <button
-                        onClick={() => room.inviteExclusiveViewer(msg.clientId, msg.userName)}
+                        onClick={() => room.inviteExclusiveViewer(msg.clientId, msg.userName, user?.name)}
                         className="opacity-0 group-hover:opacity-100 text-[10px] bg-brand text-white px-2 py-0.5 rounded transition-opacity"
                         title="Invitar a audio exclusivo"
                       >
