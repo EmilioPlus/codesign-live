@@ -129,6 +129,50 @@ wss.on("connection", (ws) => {
       return
     }
 
+    // Camera toggle — broadcaster notifies all viewers
+    if (msg.type === "camera-toggle" && msg.streamId) {
+      if (client.streamId !== msg.streamId) return
+      const streamInfo = streams.get(msg.streamId)
+      if (!streamInfo) return
+      const payload = JSON.stringify({ type: "camera-toggle", streamId: msg.streamId, cameraOn: msg.cameraOn })
+      streamInfo.viewers.forEach(viewerId => {
+        const viewer = clients.get(viewerId)
+        if (viewer) viewer.ws.send(payload)
+      })
+      return
+    }
+
+    // File message — exclusive user shares a file, broadcast to all
+    if (msg.type === "file-message" && msg.streamId && msg.fileUrl) {
+      if (client.streamId !== msg.streamId) return
+      const streamInfo = streams.get(msg.streamId)
+      if (!streamInfo) return
+      const fileMsg = {
+        type: "file-message",
+        streamId: msg.streamId,
+        fileUrl: msg.fileUrl,
+        fileName: msg.fileName || "archivo",
+        fileType: msg.fileType || "application/octet-stream",
+        userName: msg.userName || "Anónimo",
+        clientId,
+        timestamp: Date.now(),
+      }
+      const payload = JSON.stringify(fileMsg)
+      // Add to chat history
+      if (!streamInfo.chatHistory) streamInfo.chatHistory = []
+      streamInfo.chatHistory.push(fileMsg)
+      if (streamInfo.chatHistory.length > 300) streamInfo.chatHistory.shift()
+      streamInfo.viewers.forEach(viewerId => {
+        const viewer = clients.get(viewerId)
+        if (viewer) viewer.ws.send(payload)
+      })
+      if (streamInfo.broadcasterId) {
+        const broadcaster = clients.get(streamInfo.broadcasterId)
+        if (broadcaster) broadcaster.ws.send(payload)
+      }
+      return
+    }
+
     // Levantar / bajar la mano — reenviar al broadcaster
     if ((msg.type === "raise-hand" || msg.type === "lower-hand") && msg.streamId) {
       if (client.streamId !== msg.streamId) return

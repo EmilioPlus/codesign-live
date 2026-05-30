@@ -56,6 +56,7 @@ type StreamRoomContextValue = {
   addMessage: (msg: Omit<ChatMessage, "id">) => void
   sendMessage: (text: string, userName: string) => void
   sendReaction: (emoji: string, userName: string) => void
+  sendFileMessage: (payload: { fileUrl: string; fileName: string; fileType: string; userName: string }) => void
   registerWs: (ws: WebSocket | null) => void
   activeForum: Forum | null
   setActiveForum: (forum: Forum | null) => void
@@ -153,6 +154,20 @@ export function StreamRoomProvider({
     ws.send(JSON.stringify({ type: "forum-created", streamId, forum }))
   }, [streamId])
 
+  const sendFileMessage = useCallback((payload: { fileUrl: string; fileName: string; fileType: string; userName: string }) => {
+    if (!streamId) return
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    ws.send(JSON.stringify({
+      type: "file-message",
+      streamId,
+      fileUrl: payload.fileUrl,
+      fileName: payload.fileName,
+      fileType: payload.fileType,
+      userName: payload.userName,
+    }))
+  }, [streamId])
+
   const inviteExclusiveViewer = useCallback((targetId: string, userName: string) => {
     if (!streamId) return
     const ws = wsRef.current
@@ -201,6 +216,7 @@ export function StreamRoomProvider({
     addMessage,
     sendMessage,
     sendReaction,
+    sendFileMessage,
     registerWs,
     activeForum,
     setActiveForum,

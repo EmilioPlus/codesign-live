@@ -15,8 +15,16 @@ const VALID_EXTENSIONS = {
   ".png": "image/png",
   ".webp": "image/webp",
   ".glb": "model/gltf-binary",
-  ".gltf": "model/gltf+json"
+  ".gltf": "model/gltf+json",
+  // Chat document types (only for exclusive users)
+  ".pdf": "application/pdf",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".xls": "application/vnd.ms-excel",
+  ".txt": "text/plain"
 }
+
+// Extensions allowed only for chat file sharing
+const CHAT_EXTENSIONS = new Set([".pdf", ".xlsx", ".xls", ".txt"])
 
 const fileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase()
@@ -26,7 +34,7 @@ const fileFilter = (req, file, cb) => {
   if (VALID_EXTENSIONS[ext]) {
     cb(null, true)
   } else {
-    cb(new Error("Formato inválido. Solo se admiten imágenes (.jpg, .png, .webp) y modelos 3D (.glb, .gltf)."))
+    cb(new Error("Formato inválido. Solo se admiten imágenes (.jpg, .png, .webp), modelos 3D (.glb, .gltf) o documentos (.pdf, .xlsx, .xls, .txt)."))
   }
 }
 
@@ -54,6 +62,14 @@ router.post("/", authMiddleware, (req, res, next) => {
     // Validate extension is in our allowed list
     if (!VALID_EXTENSIONS[safeExt]) {
       return res.status(400).json({ error: "Extensión de archivo no permitida" })
+    }
+
+    // Chat-only documents require the uploader to be an exclusive user (role checked by client)
+    // The 'isChat' flag is passed in the form body for document uploads
+    const isChat = req.body?.isChat === "true"
+    const isChatDoc = CHAT_EXTENSIONS.has(safeExt)
+    if (isChatDoc && !isChat) {
+      return res.status(403).json({ error: "Los documentos solo pueden subirse como archivos de chat" })
     }
 
     // Generate unique, safe filename
