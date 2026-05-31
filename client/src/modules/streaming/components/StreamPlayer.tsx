@@ -607,6 +607,7 @@ export default function StreamPlayer() {
       await startScreenCapture()
       connectSignaling()
       setIsStreaming(true)
+      setShowSectionPicker(false)
     } catch (e) {
       const message = e instanceof Error ? e.message : "No se pudo iniciar la transmisión"
       setError(message)
@@ -1050,7 +1051,7 @@ export default function StreamPlayer() {
         )}
       </div>
 
-      {(isStreaming || showSectionPicker) && (
+      {showSectionPicker && (
         <div className="p-3 bg-surface-panel rounded-lg border border-border space-y-2">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="text-xs font-medium text-copy-muted">Sección de transmisión (se muestra en la lista de transmisiones)</p>

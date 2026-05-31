@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { Link } from "react-router-dom"
 import { useAuth } from "../../context/AuthContext"
 import { getStreamsApi, STREAM_SECTIONS, type Stream } from "../../services/api"
@@ -10,20 +10,34 @@ export default function Home() {
   const { isAuthenticated } = useAuth()
   const [streams, setStreams] = useState<Stream[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedSection, setSelectedSection] = useState<string>("Todas")
 
-  const fetchStreams = useCallback((section?: string) => {
+  const fetchStreams = useCallback(() => {
     setLoading(true)
-    getStreamsApi(section)
+    getStreamsApi()
       .then(({ streams }) => setStreams(streams))
       .catch(() => setStreams([]))
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
-    const section = selectedSection === "Todas" ? undefined : selectedSection
-    fetchStreams(section)
-  }, [fetchStreams, selectedSection])
+    fetchStreams()
+  }, [fetchStreams])
+
+  const sectionGroups = useMemo(() => {
+    const grouped = streams.reduce<Record<string, Stream[]>>((acc, stream) => {
+      const category = stream.categories?.[0] || "Sin sección"
+      if (!acc[category]) acc[category] = []
+      acc[category].push(stream)
+      return acc
+    }, {})
+
+    const orderedKeys = [
+      ...STREAM_SECTIONS.filter((section) => grouped[section]),
+      ...Object.keys(grouped).filter((key) => !STREAM_SECTIONS.some((section) => section === key)),
+    ]
+
+    return { grouped, orderedKeys }
+  }, [streams])
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
@@ -36,97 +50,83 @@ export default function Home() {
         </p>
       </section>
 
-      <div className="mb-6 flex flex-wrap gap-2 items-center">
-        <button
-          type="button"
-          onClick={() => setSelectedSection("Todas")}
-          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-            selectedSection === "Todas" ? "bg-brand text-white" : "bg-surface-muted text-copy hover:bg-surface"
-          }`}
-        >
-          Todas
-        </button>
-        {STREAM_SECTIONS.map((section) => (
-          <button
-            key={section}
-            type="button"
-            onClick={() => setSelectedSection(section)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-              selectedSection === section ? "bg-brand text-white" : "bg-surface-muted text-copy hover:bg-surface"
-            }`}
-          >
-            {section}
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-copy mb-1">
-          {selectedSection === "Todas" ? "Todas las secciones" : selectedSection}
-        </h2>
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-copy mb-1">Transmisiones por sección</h2>
         <p className="text-copy-muted text-sm">
-          Se muestra la sección activa y las transmisiones disponibles ahora.
+          Solo se muestran las secciones que tienen transmisiones activas ahora.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {loading ? (
-          <p className="text-copy-muted col-span-full">Cargando transmisiones…</p>
-        ) : streams.length === 0 ? (
-          <p className="text-copy-muted col-span-full">
-            No hay transmisiones en vivo. Sé el primero en transmitir.
-          </p>
-        ) : (
-          streams.map((s) => (
-            <Link
-              key={s.id}
-              to={isAuthenticated ? `/stream/${s.id}` : "/login"}
-              className="group block bg-surface-panel border border-border rounded-lg overflow-hidden hover:border-brand/50 transition-colors"
-            >
-              <div className="aspect-video bg-surface-muted relative overflow-hidden">
-                <img
-                  src={s.thumbnailUrl || DEFAULT_THUMB}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
-                <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-danger text-white text-xs font-medium">
-                  EN VIVO
-                </span>
-                <span className="absolute top-2 right-2 px-2 py-0.5 rounded bg-surface/90 text-copy-muted text-xs">
-                  {s.viewers} espectadores
+      {loading ? (
+        <p className="text-copy-muted">Cargando transmisiones…</p>
+      ) : streams.length === 0 ? (
+        <p className="text-copy-muted">
+          No hay transmisiones en vivo. Sé el primero en transmitir.
+        </p>
+      ) : (
+        <div className="space-y-10">
+          {sectionGroups.orderedKeys.map((sectionKey) => (
+            <section key={sectionKey} className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-xl font-semibold text-copy">{sectionKey}</h2>
+                <span className="text-sm text-copy-muted">
+                  {sectionGroups.grouped[sectionKey].length} transmisión{sectionGroups.grouped[sectionKey].length > 1 ? "es" : ""}
                 </span>
               </div>
-              <div className="p-3 flex gap-3">
-                <div className="flex-shrink-0 w-9 h-9 rounded-full overflow-hidden bg-surface-muted border border-border">
-                  {s.userAvatarUrl ? (
-                    <img src={s.userAvatarUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-copy-muted text-sm font-medium">
-                      {(s.user || "?").charAt(0).toUpperCase()}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {sectionGroups.grouped[sectionKey].map((stream) => (
+                  <Link
+                    key={stream.id}
+                    to={isAuthenticated ? `/stream/${stream.id}` : "/login"}
+                    className="group block bg-surface-panel border border-border rounded-lg overflow-hidden hover:border-brand/50 transition-colors"
+                  >
+                    <div className="aspect-video bg-surface-muted relative overflow-hidden">
+                      <img
+                        src={stream.thumbnailUrl || DEFAULT_THUMB}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-danger text-white text-xs font-medium">
+                        EN VIVO
+                      </span>
+                      <span className="absolute top-2 right-2 px-2 py-0.5 rounded bg-surface/90 text-copy-muted text-xs">
+                        {stream.viewers} espectadores
+                      </span>
                     </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-copy truncate">{s.title}</p>
-                  {s.categories?.length ? (
-                    <span className="inline-flex items-center rounded-full bg-surface-muted text-[10px] font-semibold uppercase tracking-[0.08em] px-2 py-1 mt-1 text-copy-muted">
-                      {s.categories[0]}
-                    </span>
-                  ) : null}
-                  {s.description ? (
-                    <>
-                      <p className="text-sm text-copy-muted line-clamp-2 mt-1">{s.description}</p>
-                      <p className="text-xs text-copy-muted/80 mt-0.5">{s.user}</p>
-                    </>
-                  ) : (
-                    <p className="text-sm text-copy-muted mt-1">{s.user}</p>
-                  )}
-                </div>
+                    <div className="p-3 flex gap-3">
+                      <div className="flex-shrink-0 w-9 h-9 rounded-full overflow-hidden bg-surface-muted border border-border">
+                        {stream.userAvatarUrl ? (
+                          <img src={stream.userAvatarUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-copy-muted text-sm font-medium">
+                            {(stream.user || "?").charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-copy truncate">{stream.title}</p>
+                        {stream.categories?.length ? (
+                          <span className="inline-flex items-center rounded-full bg-surface-muted text-[10px] font-semibold uppercase tracking-[0.08em] px-2 py-1 mt-1 text-copy-muted">
+                            {stream.categories[0]}
+                          </span>
+                        ) : null}
+                        {stream.description ? (
+                          <>
+                            <p className="text-sm text-copy-muted line-clamp-2 mt-1">{stream.description}</p>
+                            <p className="text-xs text-copy-muted/80 mt-0.5">{stream.user}</p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-copy-muted mt-1">{stream.user}</p>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
               </div>
-            </Link>
-          ))
-        )}
-      </div>
+            </section>
+          ))}
+        </div>
+      )}
 
       {!isAuthenticated && (
         <div className="mt-8 p-4 bg-surface-panel border border-border rounded-lg text-center">
