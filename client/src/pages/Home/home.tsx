@@ -23,9 +23,6 @@ export default function Home() {
   useEffect(() => {
     const section = selectedSection === "Todas" ? undefined : selectedSection
     fetchStreams(section)
-    const interval = setInterval(() => fetchStreams(section), 4000)
-
-    return () => clearInterval(interval)
   }, [fetchStreams, selectedSection])
 
   return (
@@ -39,7 +36,7 @@ export default function Home() {
         </p>
       </section>
 
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-6 flex flex-wrap gap-2 items-center">
         <button
           type="button"
           onClick={() => setSelectedSection("Todas")}
@@ -63,19 +60,13 @@ export default function Home() {
         ))}
       </div>
 
-      <div className="mb-4 text-sm text-copy-muted">
-        También puedes explorar transmisiones por sección:
-      </div>
-      <div className="mb-6 flex flex-wrap gap-2">
-        {STREAM_SECTIONS.map((section) => (
-          <Link
-            key={section}
-            to={`/seccion/${encodeURIComponent(section)}`}
-            className="px-3 py-1 rounded-full text-xs font-semibold bg-surface-muted text-copy hover:bg-surface transition-colors"
-          >
-            {section}
-          </Link>
-        ))}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-copy mb-1">
+          {selectedSection === "Todas" ? "Todas las secciones" : selectedSection}
+        </h2>
+        <p className="text-copy-muted text-sm">
+          Se muestra la sección activa y las transmisiones disponibles ahora.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
