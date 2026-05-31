@@ -5,13 +5,15 @@ const USERS_COLLECTION = "users"
 
 export const createStream = async (req, res, next) => {
   try {
-    const { title, description, thumbnailUrl } = req.body
+    const { title, description, thumbnailUrl, section } = req.body
     const userId = req.user.id
     const userName = req.user.name
 
     const titleText = title && String(title).trim() ? title.trim() : "Transmisión en vivo"
     const descriptionText = description && String(description).trim() ? description.trim() : ""
     const thumbUrl = thumbnailUrl && String(thumbnailUrl).trim() ? thumbnailUrl.trim() : null
+    const sectionText = section && String(section).trim() ? section.trim() : "General"
+    const categories = [sectionText]
 
     const userDoc = await db.collection(USERS_COLLECTION).doc(userId).get()
     const userAvatarUrl = userDoc.exists ? (userDoc.data().avatarUrl || null) : null
@@ -38,6 +40,7 @@ export const createStream = async (req, res, next) => {
         title: data.title || "Transmisión en vivo",
         description: data.description || "",
         thumbnailUrl: data.thumbnailUrl || null,
+        categories: data.categories || ["General"],
         status: data.status,
         viewerCount: 0,
         createdAt: data.createdAt,
@@ -52,6 +55,7 @@ export const createStream = async (req, res, next) => {
       title: titleText,
       description: descriptionText,
       thumbnailUrl: thumbUrl,
+      categories,
       status: "live",
       viewerCount: 0,
       createdAt: new Date().toISOString(),
@@ -66,6 +70,7 @@ export const createStream = async (req, res, next) => {
       title: titleText,
       description: descriptionText,
       thumbnailUrl: thumbUrl,
+      categories,
       status: "live",
       viewerCount: 0,
       createdAt: new Date().toISOString(),
@@ -79,10 +84,12 @@ export const createStream = async (req, res, next) => {
 
 export const listStreams = async (req, res, next) => {
   try {
-    const snap = await db
-      .collection(STREAMS_COLLECTION)
-      .where("status", "==", "live")
-      .get()
+    const section = req.query.section && String(req.query.section).trim()
+    let query = db.collection(STREAMS_COLLECTION).where("status", "==", "live")
+    if (section) {
+      query = query.where("categories", "array-contains", section)
+    }
+    const snap = await query.get()
 
     const byUser = new Map()
     for (const doc of snap.docs) {
@@ -95,6 +102,7 @@ export const listStreams = async (req, res, next) => {
         title: d.title || "Transmisión en vivo",
         description: d.description || "",
         thumbnailUrl: d.thumbnailUrl || null,
+        categories: d.categories || ["General"],
         user: d.userName,
         userAvatarUrl: d.userAvatarUrl || null,
         viewers: d.viewerCount ?? 0,
@@ -131,6 +139,7 @@ export const getStream = async (req, res, next) => {
       title: d.title || "Transmisión en vivo",
       description: d.description || "",
       thumbnailUrl: d.thumbnailUrl || null,
+      categories: d.categories || ["General"],
       user: d.userName,
       userAvatarUrl: d.userAvatarUrl || null,
       viewers: d.viewerCount ?? 0,
@@ -186,7 +195,7 @@ export const endStream = async (req, res, next) => {
 export const updateStreamMetadata = async (req, res, next) => {
   try {
     const { id } = req.params
-    const { title, description, thumbnailUrl } = req.body
+    const { title, description, thumbnailUrl, categories } = req.body
     const userId = req.user.id
 
     const docRef = db.collection(STREAMS_COLLECTION).doc(id)
@@ -208,6 +217,9 @@ export const updateStreamMetadata = async (req, res, next) => {
     if (title !== undefined) updates.title = String(title).trim() || data.title
     if (description !== undefined) updates.description = String(description).trim()
     if (thumbnailUrl !== undefined) updates.thumbnailUrl = thumbnailUrl ? String(thumbnailUrl).trim() : null
+    if (categories !== undefined && Array.isArray(categories)) {
+      updates.categories = categories.map((c) => String(c).trim()).filter(Boolean)
+    }
 
     await docRef.update(updates)
     const updated = await docRef.get()
