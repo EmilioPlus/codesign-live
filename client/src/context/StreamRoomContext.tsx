@@ -153,20 +153,22 @@ export function StreamRoomProvider({
     })
   }, [])
 
+  const generateLocalMsgId = () => `local-${Date.now()}-${Math.random().toString(36).slice(2)}`
+
   const sendMessage = useCallback((text: string, userName: string) => {
     if (!streamId || !text.trim()) return
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return
     const trimmed = text.trim()
     const timestamp = Date.now()
+    const msgId = generateLocalMsgId()
 
-    // Optimistic local add — no msgId so dedup uses text+user+time window.
-    // The server skips echoing back to the sender, so this is the only copy the sender sees.
     addMessage({
       text: trimmed,
       userName: userName || "Anónimo",
       clientId: "__local__",
       timestamp,
+      msgId,
     })
 
     ws.send(
@@ -175,6 +177,7 @@ export function StreamRoomProvider({
         streamId,
         text: trimmed,
         userName: userName || "Anónimo",
+        msgId,
       })
     )
   }, [streamId, addMessage])
@@ -216,12 +219,14 @@ export function StreamRoomProvider({
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return
     const timestamp = Date.now()
-    // Optimistic local insert — server no longer echoes back to sender
+    const msgId = generateLocalMsgId()
+    // Optimistic local insert — server may echo back the same msgId for dedup
     addMessage({
       text: "",
       userName: p.userName || "Anónimo",
       clientId: "__local__",
       timestamp,
+      msgId,
       fileUrl: p.fileUrl,
       fileName: p.fileName,
       fileType: p.fileType,
@@ -233,6 +238,7 @@ export function StreamRoomProvider({
       fileName: p.fileName,
       fileType: p.fileType,
       userName: p.userName,
+      msgId,
     }))
   }, [streamId, addMessage])
 
