@@ -6,7 +6,9 @@ import {
   updateStreamMetadataApi,
   getForumResultsApi,
   uploadFileApi,
+  STREAM_SECTIONS,
   type ForumResults,
+  type StreamSection,
   WS_URL,
 } from "../../../services/api"
 import { useStreamRoom } from "../../../context/StreamRoomContext"
@@ -50,6 +52,7 @@ export default function StreamPlayer() {
   const [activeSceneId, setActiveSceneId] = useState<SceneId>("gameplay")
   const [streamDescription, setStreamDescription] = useState("")
   const [streamThumbnailUrl, setStreamThumbnailUrl] = useState("")
+  const [selectedSection, setSelectedSection] = useState<StreamSection>(STREAM_SECTIONS[0])
   const [savingMetadata, setSavingMetadata] = useState(false)
   const [uploadingThumb, setUploadingThumb] = useState(false)
   const [forumResults, setForumResults] = useState<ForumResults | null>(null)
@@ -594,7 +597,9 @@ export default function StreamPlayer() {
     }
     setStarting(true)
     try {
-      const { stream } = await createStreamApi()
+      const { stream } = await createStreamApi({
+        section: selectedSection,
+      })
       streamIdRef.current = stream.id
       setBroadcasterStreamId(stream.id)
 
@@ -727,6 +732,7 @@ export default function StreamPlayer() {
         await updateStreamMetadataApi(sid, {
           description: streamDescription || undefined,
           thumbnailUrl: fileUrl,
+          section: selectedSection,
         })
       }
     } catch (err) {
@@ -1002,6 +1008,7 @@ export default function StreamPlayer() {
                     await updateStreamMetadataApi(sid, {
                       description: streamDescription || undefined,
                       thumbnailUrl: streamThumbnailUrl || null,
+                      section: selectedSection,
                     })
                     alert("¡Cambios guardados exitosamente!")
                   } catch (e) {
@@ -1042,7 +1049,27 @@ export default function StreamPlayer() {
         )}
       </div>
 
-      {/* Descripción y miniatura (visible en transmisión) */}
+      <div className="p-3 bg-surface-panel rounded-lg border border-border space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <p className="text-xs font-medium text-copy-muted">Sección de transmisión (se muestra en la lista de transmisiones)</p>
+          <span className="text-xs text-copy-muted">Selecciona la categoría que mejor describe tu stream</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {STREAM_SECTIONS.map((section) => (
+            <button
+              key={section}
+              type="button"
+              onClick={() => setSelectedSection(section)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                selectedSection === section ? "bg-brand text-white" : "bg-surface-muted text-copy hover:bg-surface"
+              }`}
+            >
+              {section}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {isStreaming && (
         <div className="p-3 bg-surface-panel rounded-lg border border-border space-y-2">
           <p className="text-xs font-medium text-copy-muted">Descripción y miniatura (se muestran en la lista de transmisiones)</p>

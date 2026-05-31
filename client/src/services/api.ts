@@ -133,6 +133,18 @@ export const resetPasswordApi = async (payload: {
   return handleResponse(response)
 }
 
+export const STREAM_SECTIONS = [
+  "Juegos",
+  "Trabajo",
+  "Construcción",
+  "Ingeniería",
+  "Proyectos industriales",
+  "Diseño",
+  "Educación",
+] as const
+
+export type StreamSection = (typeof STREAM_SECTIONS)[number]
+
 export type Stream = {
   id: string
   title: string
@@ -143,10 +155,13 @@ export type Stream = {
   userAvatarUrl?: string | null
   viewers: number
   live: boolean
+  categories?: string[]
 }
 
-export const getStreamsApi = async (): Promise<{ streams: Stream[] }> => {
-  const response = await fetch(`${API_URL}/streams`, {
+export const getStreamsApi = async (section?: string): Promise<{ streams: Stream[] }> => {
+  const url = new URL(`${API_URL}/streams`)
+  if (section) url.searchParams.set("section", section)
+  const response = await fetch(url.toString(), {
     credentials: "include",
   })
   return handleResponse(response)
@@ -156,6 +171,7 @@ export const createStreamApi = async (payload?: {
   title?: string
   description?: string
   thumbnailUrl?: string
+  section?: string
 }): Promise<{ stream: Stream & { userId: string; viewerCount: number; createdAt: string } }> => {
   const title = payload?.title?.trim() || "Transmisión en vivo"
   const response = await fetch(`${API_URL}/streams`, {
@@ -165,6 +181,7 @@ export const createStreamApi = async (payload?: {
       title,
       description: payload?.description?.trim() || "",
       thumbnailUrl: payload?.thumbnailUrl?.trim() || undefined,
+      section: payload?.section?.trim() || undefined,
     }),
   })
   return handleResponse(response)
@@ -172,12 +189,13 @@ export const createStreamApi = async (payload?: {
 
 export const updateStreamMetadataApi = async (
   streamId: string,
-  payload: { title?: string; description?: string; thumbnailUrl?: string | null }
+  payload: { title?: string; description?: string; thumbnailUrl?: string | null; section?: string }
 ): Promise<Stream> => {
-  const body: Record<string, string | null> = {}
+  const body: Record<string, unknown> = {}
   if (payload.title !== undefined) body.title = payload.title
   if (payload.description !== undefined) body.description = payload.description
   if (payload.thumbnailUrl !== undefined) body.thumbnailUrl = payload.thumbnailUrl
+  if (payload.section !== undefined) body.categories = [String(payload.section).trim()]
   const response = await fetch(`${API_URL}/streams/${streamId}`, {
     method: "PATCH",
     headers: authHeaders(),

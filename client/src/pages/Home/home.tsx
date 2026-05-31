@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Link } from "react-router-dom"
 import { useAuth } from "../../context/AuthContext"
-import { getStreamsApi, type Stream } from "../../services/api"
+import { getStreamsApi, STREAM_SECTIONS, type Stream } from "../../services/api"
 
 const DEFAULT_THUMB =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 9' fill='%23374151'%3E%3Crect width='16' height='9' rx='1'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='2' font-family='system-ui'%3EPreview%3C/text%3E%3C/svg%3E"
@@ -10,20 +10,23 @@ export default function Home() {
   const { isAuthenticated } = useAuth()
   const [streams, setStreams] = useState<Stream[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedSection, setSelectedSection] = useState<string>("Todas")
+
+  const fetchStreams = useCallback((section?: string) => {
+    setLoading(true)
+    getStreamsApi(section)
+      .then(({ streams }) => setStreams(streams))
+      .catch(() => setStreams([]))
+      .finally(() => setLoading(false))
+  }, [])
 
   useEffect(() => {
-    const fetchStreams = () => {
-      getStreamsApi()
-        .then(({ streams }) => setStreams(streams))
-        .catch(() => setStreams([]))
-        .finally(() => setLoading(false))
-    }
-
-    fetchStreams()
-    const interval = setInterval(fetchStreams, 4000)
+    const section = selectedSection === "Todas" ? undefined : selectedSection
+    fetchStreams(section)
+    const interval = setInterval(() => fetchStreams(section), 4000)
 
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchStreams, selectedSection])
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
@@ -35,6 +38,45 @@ export default function Home() {
           Descubre a profesionales de render compartiendo su trabajo en tiempo real
         </p>
       </section>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setSelectedSection("Todas")}
+          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+            selectedSection === "Todas" ? "bg-brand text-white" : "bg-surface-muted text-copy hover:bg-surface"
+          }`}
+        >
+          Todas
+        </button>
+        {STREAM_SECTIONS.map((section) => (
+          <button
+            key={section}
+            type="button"
+            onClick={() => setSelectedSection(section)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+              selectedSection === section ? "bg-brand text-white" : "bg-surface-muted text-copy hover:bg-surface"
+            }`}
+          >
+            {section}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-4 text-sm text-copy-muted">
+        También puedes explorar transmisiones por sección:
+      </div>
+      <div className="mb-6 flex flex-wrap gap-2">
+        {STREAM_SECTIONS.map((section) => (
+          <Link
+            key={section}
+            to={`/seccion/${encodeURIComponent(section)}`}
+            className="px-3 py-1 rounded-full text-xs font-semibold bg-surface-muted text-copy hover:bg-surface transition-colors"
+          >
+            {section}
+          </Link>
+        ))}
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
@@ -75,13 +117,18 @@ export default function Home() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-copy truncate">{s.title}</p>
+                  {s.categories?.length ? (
+                    <span className="inline-flex items-center rounded-full bg-surface-muted text-[10px] font-semibold uppercase tracking-[0.08em] px-2 py-1 mt-1 text-copy-muted">
+                      {s.categories[0]}
+                    </span>
+                  ) : null}
                   {s.description ? (
                     <>
-                      <p className="text-sm text-copy-muted line-clamp-2">{s.description}</p>
+                      <p className="text-sm text-copy-muted line-clamp-2 mt-1">{s.description}</p>
                       <p className="text-xs text-copy-muted/80 mt-0.5">{s.user}</p>
                     </>
                   ) : (
-                    <p className="text-sm text-copy-muted">{s.user}</p>
+                    <p className="text-sm text-copy-muted mt-1">{s.user}</p>
                   )}
                 </div>
               </div>
