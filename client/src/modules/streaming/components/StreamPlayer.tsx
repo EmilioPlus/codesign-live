@@ -53,6 +53,7 @@ export default function StreamPlayer() {
   const [streamDescription, setStreamDescription] = useState("")
   const [streamThumbnailUrl, setStreamThumbnailUrl] = useState("")
   const [selectedSection, setSelectedSection] = useState<StreamSection>(STREAM_SECTIONS[0])
+  const [showSectionPicker, setShowSectionPicker] = useState(false)
   const [savingMetadata, setSavingMetadata] = useState(false)
   const [uploadingThumb, setUploadingThumb] = useState(false)
   const [forumResults, setForumResults] = useState<ForumResults | null>(null)
@@ -618,7 +619,7 @@ export default function StreamPlayer() {
     } finally {
       setStarting(false)
     }
-  }, [startScreenCapture, setBroadcasterStreamId, connectSignaling, isMobileDevice])
+  }, [startScreenCapture, setBroadcasterStreamId, connectSignaling, isMobileDevice, selectedSection])
 
   const stopStream = useCallback(async () => {
     const sid = streamIdRef.current
@@ -830,11 +831,11 @@ export default function StreamPlayer() {
             {!isMobileDevice ? (
               <button
                 type="button"
-                onClick={startStream}
+                onClick={() => setShowSectionPicker(true)}
                 disabled={starting}
                 className="px-4 py-2.5 sm:py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors shrink-0 whitespace-nowrap text-center"
               >
-                {starting ? "Iniciando..." : "Iniciar transmisión de pantalla"}
+                {starting ? "Iniciando..." : "Transmitir"}
               </button>
             ) : (
               <div className="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 select-none">
@@ -1049,26 +1050,49 @@ export default function StreamPlayer() {
         )}
       </div>
 
-      <div className="p-3 bg-surface-panel rounded-lg border border-border space-y-2">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <p className="text-xs font-medium text-copy-muted">Sección de transmisión (se muestra en la lista de transmisiones)</p>
-          <span className="text-xs text-copy-muted">Selecciona la categoría que mejor describe tu stream</span>
+      {(isStreaming || showSectionPicker) && (
+        <div className="p-3 bg-surface-panel rounded-lg border border-border space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <p className="text-xs font-medium text-copy-muted">Sección de transmisión (se muestra en la lista de transmisiones)</p>
+            <span className="text-xs text-copy-muted">
+              Selecciona la categoría que mejor describe tu transmisión.
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {STREAM_SECTIONS.map((section) => (
+              <button
+                key={section}
+                type="button"
+                onClick={() => setSelectedSection(section)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                  selectedSection === section ? "bg-brand text-white" : "bg-surface-muted text-copy hover:bg-surface"
+                }`}
+              >
+                {section}
+              </button>
+            ))}
+          </div>
+          {!isStreaming && showSectionPicker && (
+            <div className="flex flex-wrap items-center gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowSectionPicker(false)}
+                className="px-3 py-2 rounded-lg bg-surface-muted text-copy text-sm font-medium border border-border hover:bg-surface transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={startStream}
+                disabled={starting}
+                className="px-3 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              >
+                {starting ? "Iniciando..." : "Continuar con la transmisión"}
+              </button>
+            </div>
+          )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {STREAM_SECTIONS.map((section) => (
-            <button
-              key={section}
-              type="button"
-              onClick={() => setSelectedSection(section)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-                selectedSection === section ? "bg-brand text-white" : "bg-surface-muted text-copy hover:bg-surface"
-              }`}
-            >
-              {section}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {isStreaming && (
         <div className="p-3 bg-surface-panel rounded-lg border border-border space-y-2">
