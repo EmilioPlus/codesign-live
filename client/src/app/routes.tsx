@@ -10,8 +10,9 @@ import Profile from "../pages/Profile/profile"
 import AdminDashboard from "../pages/AdminDashboard/AdminDashboard"
 import StreamPage from "../modules/streaming/pages/StreamPage"
 import WatchPage from "../modules/streaming/pages/WatchPage"
+import SectionPage from "../pages/Section"
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter([ 
   {
     path: "/",
     element: <MainLayout />,
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
       { path: "auth/reset/:userId/:token", element: <ResetPassword /> },
       { path: "profile", element: <Profile /> },
       { path: "admin", element: <AdminDashboard /> },
+      { path: "seccion/:section", element: <SectionPage /> },
     ],
   },
   {

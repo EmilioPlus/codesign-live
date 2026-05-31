@@ -13,7 +13,8 @@ const rtcConfig: RTCConfiguration = {
 export default function WatchPage() {
   const { streamId } = useParams()
   const { user } = useAuth()
-  const { addMessage, registerWs, setActiveForum, addStroke, clearStrokes, setViewerCount } = useStreamRoom()
+  const { addMessage, registerWs, setActiveForum, addStroke, clearStrokes, setViewerCount, setExclusiveUser } = useStreamRoom()
+  const ownClientIdRef = useRef<string | null>(null)
   const mainVideoRef = useRef<HTMLVideoElement>(null)
   const overlayVideoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -84,6 +85,7 @@ export default function WatchPage() {
     if (!inviteFromId) return
     const targetBroadcaster = inviteFromId
     setInviteFromId(null)
+    setExclusiveUser({ clientId: ownClientIdRef.current || "self-exclusive", userName: user?.name || "Invitado Exclusivo" })
     try {
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       exclusiveMicRef.current = micStream
@@ -322,6 +324,11 @@ export default function WatchPage() {
         return
       }
 
+      if (msg.type === "joined" && msg.role === "viewer" && msg.streamId === streamId) {
+        ownClientIdRef.current = msg.clientId || null
+        return
+      }
+
       if (msg.type === "invite-exclusive") {
         setInviteFromId(msg.fromId || msg.clientId || broadcasterIdRef.current)
         setInviteUserName(msg.userName || "El transmisor")
@@ -363,6 +370,7 @@ export default function WatchPage() {
         }
         pointerAllowedRef.current = false
         setInviteFromId(null)
+        setExclusiveUser(null)
         alert("El transmisor ha cerrado el canal exclusivo.")
         return
       }
