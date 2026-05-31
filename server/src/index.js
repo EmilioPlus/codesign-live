@@ -185,10 +185,11 @@ wss.on("connection", (ws) => {
       streamInfo.chatHistory.push(fileMsg)
       if (streamInfo.chatHistory.length > 300) streamInfo.chatHistory.shift()
       streamInfo.viewers.forEach(viewerId => {
+        if (viewerId === clientId) return
         const viewer = clients.get(viewerId)
         if (viewer) viewer.ws.send(payload)
       })
-      if (streamInfo.broadcasterId) {
+      if (streamInfo.broadcasterId && streamInfo.broadcasterId !== clientId) {
         const broadcaster = clients.get(streamInfo.broadcasterId)
         if (broadcaster) broadcaster.ws.send(payload)
       }
@@ -264,12 +265,13 @@ wss.on("connection", (ws) => {
       if (streamInfo.chatHistory.length > 300) {
         streamInfo.chatHistory.shift()
       }
-      // Broadcast to all viewers, including the sender. Client dedupes by msgId.
+      // Broadcast to everyone else; the sender already has the message locally.
       streamInfo.viewers.forEach((viewerId) => {
+        if (viewerId === clientId) return
         const viewer = clients.get(viewerId)
         if (viewer) viewer.ws.send(payload)
       })
-      if (streamInfo.broadcasterId) {
+      if (streamInfo.broadcasterId && streamInfo.broadcasterId !== clientId) {
         const broadcaster = clients.get(streamInfo.broadcasterId)
         if (broadcaster) broadcaster.ws.send(payload)
       }
