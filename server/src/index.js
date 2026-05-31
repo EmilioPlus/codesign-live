@@ -21,16 +21,26 @@ import { cleanupExpiredVerificationTokens } from "./services/token/verification-
 const PORT = process.env.PORT || 4000
 const STREAMS_COLLECTION = "streams"
 
-const server = http.createServer(app)
-
-const wss = new WebSocketServer({ server, path: "/ws" })
-
 const clients = new Map()
 const streams = new Map()
 
 function createClientId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
+
+function broadcastStreamEvent(payload) {
+  const message = JSON.stringify(payload)
+  for (const client of clients.values()) {
+    if (client.subscribedToStreamUpdates && client.ws && client.ws.readyState === 1) {
+      client.ws.send(message)
+    }
+  }
+}
+
+const server = http.createServer(app)
+app.locals.broadcastStreamEvent = broadcastStreamEvent
+
+const wss = new WebSocketServer({ server, path: "/ws" })
 
 wss.on("connection", (ws) => {
   ws.isAlive = true
@@ -39,7 +49,7 @@ wss.on("connection", (ws) => {
   })
 
   const clientId = createClientId()
-  const client = { id: clientId, ws, role: null, streamId: null }
+  const client = { id: clientId, ws, role: null, streamId: null, subscribedToStreamUpdates: false }
   clients.set(clientId, client)
 
   ws.on("message", (data) => {
@@ -47,6 +57,11 @@ wss.on("connection", (ws) => {
     try {
       msg = JSON.parse(data.toString())
     } catch {
+      return
+    }
+
+    if (msg.type === "subscribe-stream-updates") {
+      client.subscribedToStreamUpdates = true
       return
     }
 
@@ -341,6 +356,7 @@ wss.on("connection", (ws) => {
               )
             }
           })
+          broadcastStreamEvent({ type: "stream-ended", streamId })
           streams.delete(streamId)
         }
         db.collection(STREAMS_COLLECTION)
