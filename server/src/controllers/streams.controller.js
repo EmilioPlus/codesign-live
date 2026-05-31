@@ -76,6 +76,10 @@ export const createStream = async (req, res, next) => {
       createdAt: new Date().toISOString(),
     }
 
+    if (req.app.locals.broadcastStreamEvent) {
+      req.app.locals.broadcastStreamEvent({ type: "stream-started", stream })
+    }
+
     return res.status(201).json({ stream })
   } catch (error) {
     return next(error)
@@ -176,6 +180,10 @@ export const endStream = async (req, res, next) => {
       endedAt: new Date().toISOString(),
     })
 
+    if (req.app.locals.broadcastStreamEvent) {
+      req.app.locals.broadcastStreamEvent({ type: "stream-ended", streamId: id })
+    }
+
     const otherLive = await db
       .collection(STREAMS_COLLECTION)
       .where("userId", "==", userId)
@@ -183,7 +191,12 @@ export const endStream = async (req, res, next) => {
       .get()
     const endedAt = new Date().toISOString()
     for (const d of otherLive.docs) {
-      if (d.id !== id) await d.ref.update({ status: "ended", endedAt })
+      if (d.id !== id) {
+        await d.ref.update({ status: "ended", endedAt })
+        if (req.app.locals.broadcastStreamEvent) {
+          req.app.locals.broadcastStreamEvent({ type: "stream-ended", streamId: d.id })
+        }
+      }
     }
 
     return res.json({ message: "Transmisión finalizada correctamente" })
@@ -224,7 +237,7 @@ export const updateStreamMetadata = async (req, res, next) => {
     await docRef.update(updates)
     const updated = await docRef.get()
     const d = updated.data()
-    return res.json({
+    const response = {
       id: updated.id,
       userId: d.userId,
       title: d.title,
@@ -234,7 +247,13 @@ export const updateStreamMetadata = async (req, res, next) => {
       userAvatarUrl: d.userAvatarUrl || null,
       viewers: d.viewerCount ?? 0,
       live: d.status === "live",
-    })
+    }
+
+    if (req.app.locals.broadcastStreamEvent) {
+      req.app.locals.broadcastStreamEvent({ type: "stream-updated", stream: response })
+    }
+
+    return res.json(response)
   } catch (error) {
     return next(error)
   }

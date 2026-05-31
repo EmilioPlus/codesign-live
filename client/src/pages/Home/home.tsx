@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { Link } from "react-router-dom"
 import { useAuth } from "../../context/AuthContext"
-import { getStreamsApi, STREAM_SECTIONS, type Stream } from "../../services/api"
+import { getStreamsApi, STREAM_SECTIONS, type Stream, WS_URL } from "../../services/api"
 
 const DEFAULT_THUMB =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 9' fill='%23374151'%3E%3Crect width='16' height='9' rx='1'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='2' font-family='system-ui'%3EPreview%3C/text%3E%3C/svg%3E"
@@ -10,6 +10,7 @@ export default function Home() {
   const { isAuthenticated } = useAuth()
   const [streams, setStreams] = useState<Stream[]>([])
   const [loading, setLoading] = useState(true)
+  const wsRef = useRef<WebSocket | null>(null)
 
   const fetchStreams = useCallback(() => {
     setLoading(true)
@@ -21,6 +22,54 @@ export default function Home() {
 
   useEffect(() => {
     fetchStreams()
+
+    const ws = new WebSocket(WS_URL)
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "subscribe-stream-updates" }))
+    }
+
+    ws.onmessage = (event) => {
+      let payload
+      try {
+        payload = JSON.parse(event.data)
+      } catch {
+        return
+      }
+
+      if (payload.type === "stream-started" && payload.stream) {
+        setStreams((current) => {
+          if (current.some((stream) => stream.id === payload.stream.id)) return current
+          return [payload.stream, ...current]
+        })
+      }
+
+      if (payload.type === "stream-ended" && payload.streamId) {
+        setStreams((current) => current.filter((stream) => stream.id !== payload.streamId))
+      }
+
+      if (payload.type === "stream-updated" && payload.stream) {
+        setStreams((current) =>
+          current.map((stream) => (stream.id === payload.stream.id ? payload.stream : stream))
+        )
+      }
+    }
+
+    ws.onerror = () => {
+      // ignore socket failures here; streams still load once on page open
+    }
+
+    ws.onclose = () => {
+      wsRef.current = null
+    }
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+    }
   }, [fetchStreams])
 
   const sectionGroups = useMemo(() => {
@@ -45,17 +94,9 @@ export default function Home() {
         <h1 className="text-2xl font-semibold text-copy mb-1">
           Transmisiones en vivo
         </h1>
-        <p className="text-copy-muted text-sm">
-          Descubre a profesionales de render compartiendo su trabajo en tiempo real
-        </p>
       </section>
 
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-copy mb-1">Transmisiones por sección</h2>
-        <p className="text-copy-muted text-sm">
-          Solo se muestran las secciones que tienen transmisiones activas ahora.
-        </p>
-      </div>
+      <div className="mb-8" />
 
       {loading ? (
         <p className="text-copy-muted">Cargando transmisiones…</p>
